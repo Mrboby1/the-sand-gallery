@@ -3,7 +3,10 @@ import { applyColors, type CustomColors } from '../lib/customColors'
 import { Hourglass } from '../components/Hourglass'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Bell, Check, Copy, DatabaseBackup, LogOut, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Bell, Check, Copy, DatabaseBackup, LogOut, Pencil, Plus, Search, Sparkles, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { FEATURE_GROUPS, featureHow, featureTitle } from '../lib/features'
+import { flashTo } from './FeaturesPage'
 import {
   useApp, addStatus, addTemplate, backend, deleteStatus, deleteTemplate, moveStatus, revokeShare, saveSettings, shareUrl,
   signOut, toast, updateStatus, updateTemplate,
@@ -20,9 +23,9 @@ import { clearTimer, disablePush, ensurePush, permission, requestNotifications }
 const CURRENCIES = ['ILS', 'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF', 'JPY']
 const SWATCHES = ['#9b87c9', '#d9903d', '#8f9aa6', '#5f9e6e', '#c0564a', '#4f8fbf', '#c27ba0', '#b8a038', '#3f9c95', '#7a5634']
 
-function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+function Section({ title, hint, children, id }: { title: string; hint?: string; children: ReactNode; id?: string }) {
   return (
-    <section className="rise rounded-3xl border border-line bg-surface p-5">
+    <section id={id ? `set-${id}` : undefined} className="rise scroll-mt-20 rounded-3xl border border-line bg-surface p-5">
       <h2 className="font-display text-xl font-semibold">{title}</h2>
       {hint && <p className="mt-1 text-[13px] text-muted">{hint}</p>}
       <div className="mt-4">{children}</div>
@@ -45,8 +48,9 @@ export function SettingsPage() {
   return (
     <div className="min-h-full pb-24">
       <TopBar back="/" title={t('settings.title')} />
+      <SettingsSearch />
       <main className="mx-auto max-w-6xl columns-1 gap-4 px-4 pt-4 sm:px-6 lg:columns-2 [&>*]:mb-4 [&>*]:break-inside-avoid">
-        <Section title={t('settings.statuses')} hint={`${t('settings.statusesHint')} ${t('settings.finishedHint')}`}>
+        <Section id="statuses" title={t('settings.statuses')} hint={`${t('settings.statusesHint')} ${t('settings.finishedHint')}`}>
           <div className="flex flex-col gap-2">
             {statuses.map((st, i) => (
               <div key={st.id} className="flex items-center gap-2">
@@ -75,7 +79,7 @@ export function SettingsPage() {
           <Button className="mt-3" size="sm" variant="soft" onClick={() => addStatus(t('settings.newStatus'), SWATCHES[statuses.length % SWATCHES.length])}><Plus size={15} /> {t('settings.addStatus')}</Button>
         </Section>
 
-        <Section title={t('settings.pricing')}>
+        <Section id="pricing" title={t('settings.pricing')}>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <Field label={t('settings.rate')}>
               <Input type="number" inputMode="decimal" min={0} step="any" defaultValue={s.hourly_rate || ''} key={`r${s.hourly_rate}`} onBlur={(e) => saveSettings({ hourly_rate: Number(e.target.value) || 0 })} />
@@ -92,7 +96,7 @@ export function SettingsPage() {
           {s.hourly_rate > 0 && <p className="mt-3 text-[13px] text-muted">1h = {money(s.hourly_rate)}</p>}
         </Section>
 
-        <Section title={t('settings.planning')}>
+        <Section id="planning" title={t('settings.planning')}>
           <label className="flex items-center justify-between gap-4">
             <span>
               <span className="block font-medium">{t('settings.dueDates')}</span>
@@ -106,7 +110,7 @@ export function SettingsPage() {
           </div>
         </Section>
 
-        <Section title={t('settings.appearance')}>
+        <Section id="appearance" title={t('settings.appearance')}>
           <div className="flex items-center justify-between gap-4">
             <span className="font-medium">{t('settings.theme')}</span>
             <Segmented
@@ -131,7 +135,7 @@ export function SettingsPage() {
 
         <NotificationsSection />
 
-        <Section title={t('settings.templates')}>
+        <Section id="templates" title={t('settings.templates')}>
           {!data.templates.length && <p className="mb-3 text-sm text-muted">{t('settings.noTemplates')}</p>}
           <div className="flex flex-col gap-1">
             {data.templates.map((tp) => (
@@ -148,7 +152,7 @@ export function SettingsPage() {
           <Button className="mt-3" size="sm" variant="soft" onClick={() => setEditTpl('new')}><Plus size={15} /> {t('settings.addTemplate')}</Button>
         </Section>
 
-        <Section title={t('settings.shareLinks')}>
+        <Section id="share" title={t('settings.shareLinks')}>
           {!activeLinks.length && <p className="text-sm text-muted">{t('settings.noShareLinks')}</p>}
           {activeLinks.map((l) => (
             <div key={l.id} className="flex items-center gap-2 py-1.5">
@@ -159,7 +163,13 @@ export function SettingsPage() {
           ))}
         </Section>
 
-        <Section title={t('settings.account')}>
+        <Section id="features" title={t('settings.features')} hint={t('settings.featuresHint')}>
+          <Link to="/settings/features" className="inline-flex h-10 items-center gap-2 rounded-full bg-surface-2 px-4 text-sm font-medium transition hover:bg-accent-soft">
+            <Sparkles size={16} /> {t('settings.featuresOpen')}
+          </Link>
+        </Section>
+
+        <Section id="account" title={t('settings.account')}>
           <div className="flex items-center gap-3">
             {user?.avatar_url ? <img src={user.avatar_url} alt="" className="h-11 w-11 rounded-full" referrerPolicy="no-referrer" /> : <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary font-display text-lg font-semibold text-on-primary">{(user?.name ?? user?.email ?? '?')[0]?.toUpperCase()}</div>}
             <div className="min-w-0 flex-1">
@@ -211,7 +221,7 @@ function NotificationsSection() {
   const [busy, setBusy] = useState(false)
   const stateKey = `notif.state.${perm}` as const
   return (
-    <Section title={t('notif.section')}>
+    <Section id="notifications" title={t('notif.section')}>
       <label className="flex items-center justify-between gap-4">
         <span>
           <span className="block font-medium">{t('notif.timer')}</span>
@@ -395,6 +405,62 @@ function ReminderPicker({ value }: { value: number }) {
         </form>
       </Sheet>
     </>
+  )
+}
+
+/** Settings search: finds settings (jumps to them with a short highlight) and features (opens the list). */
+function SettingsSearch() {
+  const [q, setQ] = useState('')
+  const nav = useNavigate()
+  const needle = q.trim().toLowerCase()
+  const settingsIndex: { id: string; label: string; kw: string }[] = [
+    { id: 'statuses', label: t('settings.statuses'), kw: 'status colour color finished done sold order idea progress' },
+    { id: 'pricing', label: `${t('settings.pricing')} · ${t('settings.rate')}`, kw: 'hourly rate currency markup price cost money' },
+    { id: 'planning', label: t('settings.dueDates'), kw: 'due date deadline calendar' },
+    { id: 'planning', label: t('settings.weekStarts'), kw: 'week start sunday monday other day' },
+    { id: 'appearance', label: t('settings.theme'), kw: 'dark light mode theme system' },
+    { id: 'appearance', label: t('settings.style'), kw: 'style flat glossy 2d hourglass look' },
+    { id: 'appearance', label: t('colors.title'), kw: 'colour color hue slider background sand hourglass' },
+    { id: 'notifications', label: t('notif.timer'), kw: 'notification push allow test phone' },
+    { id: 'notifications', label: t('notif.reminder'), kw: 'reminder remind custom interval still working' },
+    { id: 'templates', label: t('settings.templates'), kw: 'template subtasks' },
+    { id: 'share', label: t('settings.shareLinks'), kw: 'share link revoke public' },
+    { id: 'features', label: t('settings.features'), kw: 'features tips help how' },
+    { id: 'account', label: t('settings.account'), kw: 'sign out account backup back up logout' },
+  ]
+  const settingHits = needle ? settingsIndex.filter((r) => `${r.label} ${r.kw}`.toLowerCase().includes(needle)) : []
+  const featureHits = needle
+    ? FEATURE_GROUPS.flatMap((g) => g.features).filter((f) => `${t(featureTitle(f.id))} ${t(featureHow(f.id))} ${f.keywords}`.toLowerCase().includes(needle)).slice(0, 8)
+    : []
+  return (
+    <div className="mx-auto max-w-6xl px-4 pt-4 sm:px-6">
+      <div className="relative">
+        <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={t('settings.search')}
+          aria-label={t('settings.search')}
+          className="h-12 w-full rounded-2xl border border-line bg-surface pl-11 pr-4 text-[16px] outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+        />
+      </div>
+      {needle && (
+        <div className="rise mt-2 rounded-2xl border border-line bg-surface p-2">
+          {!settingHits.length && !featureHits.length && <p className="px-3 py-3 text-sm text-muted">{t('settings.searchNone')}</p>}
+          {settingHits.length > 0 && <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted">{t('settings.searchSettings')}</div>}
+          {settingHits.map((r, i) => (
+            <button key={i} onClick={() => { setQ(''); flashTo(`set-${r.id}`) }} className="block w-full rounded-xl px-3 py-2.5 text-left text-[15px] hover:bg-surface-2">{r.label}</button>
+          ))}
+          {featureHits.length > 0 && <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted">{t('settings.searchFeatures')}</div>}
+          {featureHits.map((f) => (
+            <button key={f.id} onClick={() => nav(`/settings/features#${f.id}`)} className="block w-full rounded-xl px-3 py-2 text-left hover:bg-surface-2">
+              <span className="block text-[15px]">{t(featureTitle(f.id))}</span>
+              <span className="block truncate text-[13px] text-muted">{t(featureHow(f.id))}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

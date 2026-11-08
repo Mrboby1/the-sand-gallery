@@ -147,7 +147,10 @@ templates, share_links, settings) with the service-role key or SQL. Photos/video
    and `LocalBackend` (`emptyDB`).
 3. Actions in `web/src/store/app.ts` using `commit(local, remote)` for an instant UI with server persistence.
 4. UI in `components/` or `pages/`; every string in `i18n/en.ts`.
-5. `npm run build`, test locally, deploy.
+5. **Add it to Settings > Features & tips**: one entry in `web/src/lib/features.ts` (id + search keywords) and
+   its `feature.<id>.title` / `feature.<id>.how` strings in `i18n/en.ts`. Every new feature must be listed there;
+   the Settings search also finds it. If it adds a setting, add a row to `settingsIndex` in `SettingsPage.tsx`.
+6. `npm run build`, test locally, deploy.
 
 ## Testing
 Automated browser tests used a temporary email/password user (`scripts/test-user.ps1`) because Google blocks
