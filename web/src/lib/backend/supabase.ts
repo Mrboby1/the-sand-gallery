@@ -258,7 +258,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 export function isNetworkError(e: unknown): boolean {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
   const m = String((e as { message?: unknown })?.message ?? e)
-  return /Failed to fetch|NetworkError|Load failed|network|timeout/i.test(m)
+  return /Failed to fetch|NetworkError|(^|[^p])Load failed|(network)|timeout/i.test(m)
 }
 
 async function withRetry<T>(fn: () => Promise<T>, attempts = 4): Promise<T> {

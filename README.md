@@ -13,7 +13,10 @@ web/                 Vite + React 19 + TypeScript + Tailwind v4, installable PWA
   src/lib/backend/   the data layer behind one interface (Backend in types.ts)
     supabase.ts      cloud: Supabase (DB + Google auth) + the Worker (media, share pages, wake-up, backup)
     local.ts         browser-only: localStorage + IndexedDB (dev/demo, same behaviour)
-  src/store/app.ts   app state (zustand) and every action; optimistic updates, then persist
+  src/store/app.ts   app state (zustand) and every action. Every write is an "op" in a persisted outbox:
+                     applied to the UI at once, sent now if online, replayed in order when back online
+                     (timer start/stop keep the time they really happened). The last snapshot is cached
+                     in localStorage so the app opens offline.
   src/components/    Hourglass (logo + timer), tiles, views (grid/list/board/calendar), tabs, sheets
   src/pages/         Home, ItemPage, Search, Settings, SharePage (public /s/:token), Login
   src/i18n/          every UI string goes through t(); add a language by copying en.ts
@@ -30,8 +33,9 @@ infra/               owned by sand.cloud: CLOUD.md (non-secret config) + get-sec
 `items` (self-nesting via `parent_id`, cycle-checked by trigger), `statuses`, `sessions` (timer start/end; a partial
 unique index allows only ONE open session per user), `media` (B2 keys, photo/video, process/finished), `cost_lines`,
 `templates` (JSON tree), `share_links` (random token, revocable), `settings` (one row per user).
-RPCs: `ensure_defaults()` (seeds default statuses), `start_timer(item, session)` (closes the open session and opens a
-new one, atomically), `stop_timer()`, `shared_gallery(token)` (service-role only, used by the Worker). View
+RPCs: `ensure_defaults()` (seeds default statuses, advisory-locked), `start_timer(item, session, at)` (closes the open
+session and opens a new one, atomically, idempotent per session id; `at` = when it happened offline, clamped to now),
+`stop_timer(at)`, `ping()` (anon health probe), `shared_gallery(token)` (service-role only, used by the Worker). View
 `item_totals` gives recursive totals in SQL; the app computes the same client-side so parents tick live.
 
 ### Media (Backblaze B2, SHARED account)
@@ -53,9 +57,13 @@ all day, and the service worker caches thumbnails by path.
 | `POST /api/media/delete` | delete own objects [auth] |
 | `GET /api/share/:token` | public gallery for a share link (titles, statuses, media; no notes/times/costs) |
 | `GET /api/health` | `up` / `asleep` / `waking` / `unreachable` |
-| `POST /api/wake` | restores a paused Supabase project (Management API) |
-| `POST /api/backup` | run the backup now [auth] (Settings > Account > Back up now) |
+| `POST /api/wake` | restores a paused Supabase project. Needs a Supabase JWT, verified locally against the embedded JWKS (works while the DB sleeps; tokens up to 30 days past expiry accepted); 1 call/min per user, and 1 per 30 min total without a token (KV `RATE`) |
+| `POST /api/backup` | run the backup now [auth, 1 per 5 min] (Settings > Account > Back up now) |
 | cron `0 3 * * *` | keep-alive query + JSON export of all tables to B2; if the DB is asleep it requests a restore |
+
+Share-page media URLs are signed per hour (valid up to 2 h), so revoking a link takes effect within about 2 hours.
+Uploads retry with backoff; a failed thumbnail keeps the photo (shown from the original), a failed original
+deletes whatever was stored and shows Retry/Remove on the tile.
 
 Vars live in `worker/wrangler.toml`; secrets (`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ACCESS_TOKEN`,
 `B2_APPLICATION_KEY`) are Worker secrets only.

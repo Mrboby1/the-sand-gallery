@@ -156,7 +156,7 @@ export function flush(): Promise<void> {
       if (!uid) break
       if (q.uid !== uid) { outbox.shift(); saveOutbox(); continue }
       try {
-        await runOp(q.op, Date.now() - q.at < 15_000)
+        await runOp(q.op, Date.now() - q.at < 2_000)
         outbox.shift()
         saveOutbox()
       } catch (e) {
