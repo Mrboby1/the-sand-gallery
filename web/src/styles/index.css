@@ -126,15 +126,27 @@ body {
 .sand-texture { background-color: var(--sg-surface-2); }
 
 /* ---------- Hourglass animation ---------- */
-.hg .grain { animation: hg-fall-out var(--d, 1.1s) cubic-bezier(.45,0,.9,.6) infinite; animation-delay: var(--delay, 0s); transform-box: view-box; }
-.hg .grain.in { animation-name: hg-fall-in; }
+/* Sand physics, cheaply (CSS transforms on a few dozen SVG dots, no JS per frame):
+   - grains leaving the neck start at rest and accelerate under gravity: cubic-bezier(.11,0,.5,0) is the
+     ease-in-quad curve, so the distance fallen grows with time squared (y = g·t²/2);
+   - grains pouring in from above are already moving, so they speed up more gently;
+   - the sand level stays still (an endless hourglass never runs out); a few surface grains slide down the
+     slope into the small crater above the neck and disappear into it. */
+.hg .grain { animation: hg-fall-out var(--d, 1.1s) cubic-bezier(.11, 0, .5, 0) infinite; animation-delay: var(--delay, 0s); transform-box: view-box; will-change: transform, opacity; }
+.hg .grain.in { animation-name: hg-fall-in; animation-timing-function: cubic-bezier(.3, .1, .6, .55); }
+.hg .slide { animation: hg-slide var(--d, 2.6s) cubic-bezier(.45, 0, .85, .45) infinite; animation-delay: var(--delay, 0s); transform-box: view-box; }
 .hg .stream { animation: hg-stream 0.5s linear infinite; }
-.hg .surface { animation: hg-breathe 2.4s ease-in-out infinite; transform-origin: 50% 50%; transform-box: fill-box; }
 .hg .glow { animation: hg-glow 2.4s ease-in-out infinite; }
 .hg.paused .grain,
+.hg.paused .slide,
 .hg.paused .stream,
-.hg.paused .surface,
 .hg.paused .glow { animation-play-state: paused; }
+@keyframes hg-slide {
+  0% { transform: translate(0, 0); opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translate(var(--dx, 0px), var(--dy, 0px)); opacity: 0; }
+}
 /* above the glass: invisible high up, fully solid by the time it enters the top opening */
 @keyframes hg-fall-in {
   0% { transform: translate(0, 0); opacity: 0; }
@@ -148,10 +160,10 @@ body {
   100% { transform: translate(var(--dx, 0px), var(--dy, 30px)); opacity: 0; }
 }
 @keyframes hg-stream { to { stroke-dashoffset: -6; } }
-@keyframes hg-breathe { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(0.92); } }
 @keyframes hg-glow { 0%,100% { opacity: 0.35; } 50% { opacity: 0.7; } }
 @media (prefers-reduced-motion: reduce) {
-  .hg .grain, .hg .stream, .hg .surface, .hg .glow { animation-duration: 4s; }
+  .hg .grain, .hg .stream, .hg .glow { animation-duration: 4s; }
+  .hg .slide { display: none; }
 }
 
 /* Generic entrance */

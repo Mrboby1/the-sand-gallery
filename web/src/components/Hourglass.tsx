@@ -55,8 +55,37 @@ const OUTGOING_FULL = makeOutgoing(30, 0.65, 1.1, 11, 238 - 38 - 2 - 82, 16)
 const INCOMING_LITE = makeIncoming(3, 2, 2.4, 3, 0)
 const OUTGOING_LITE = makeOutgoing(4, 2, 2.4, 5, 158 - 82, 5)
 // 2D style: grains land on the top of the sand mound (higher than the funnel of the other styles)
-const INCOMING_2D_FULL = makeIncoming(16, 0.7, 1.15, 7, -38, 40)
-const INCOMING_2D_LITE = makeIncoming(3, 2, 2.4, 3, 0, 40)
+const INCOMING_2D_FULL = makeIncoming(16, 0.7, 1.15, 7, -38, 42)
+const INCOMING_2D_LITE = makeIncoming(3, 2, 2.4, 3, 0, 42)
+
+interface Slider { x: number; y: number; dx: number; dy: number; d: number; delay: number; r: number }
+/** Surface grains: start on the slope, slide to the crater at (60, craterY), slowly and staggered. */
+function makeSliders(starts: [number, number][], craterY: number, seed: number): Slider[] {
+  const r = rng(seed)
+  return starts.map(([x, y], i) => ({
+    x, y,
+    dx: 60 + (r() - 0.5) * 2 - x,
+    dy: craterY - y,
+    d: 2.2 + r() * 1.4,
+    delay: -((i + r() * 0.5) / starts.length) * 3,
+    r: 0.75 + r() * 0.35,
+  }))
+}
+// classic surface: y(x) = 38 + 48·t·(1−t), t = x/120 (a funnel whose lowest point, the crater, is above the neck)
+const SLIDERS_CLASSIC = makeSliders([[34, 47.7], [40, 48.7], [46, 49.4], [74, 49.4], [80, 48.7], [86, 47.7], [37, 48.2], [83, 48.2]], 50.8, 21)
+// 2D: a mound with a small crater on top
+const SLIDERS_2D = makeSliders([[38, 37.6], [43, 37.4], [48, 38.6], [72, 38.6], [77, 37.4], [82, 37.6]], 43.2, 23)
+
+function SurfaceSliders({ list, fill }: { list: Slider[]; fill: string }) {
+  return (
+    <>
+      {list.map((g, i) => (
+        <circle key={i} className="slide" cx={g.x} cy={g.y} r={g.r} fill={fill}
+          style={{ ['--d' as string]: `${g.d}s`, ['--delay' as string]: `${g.delay}s`, ['--dx' as string]: `${g.dx}px`, ['--dy' as string]: `${g.dy}px` }} />
+      ))}
+    </>
+  )
+}
 
 /**
  * "2D" style (Gabi's sketch): just two walls that pinch at the neck, no top or bottom cap, a flat sand
@@ -87,7 +116,10 @@ function Hourglass2D({ running, size, className, title, detail }: { running: boo
       <defs><clipPath id={clip}><path d={inside} /></clipPath></defs>
       {/* the sand mound in the upper half, flat colour */}
       <g clipPath={`url(#${clip})`}>
-        <path className="surface" d="M 0 54 Q 60 24 120 54 L 120 84 L 0 84 Z" fill="var(--hg2-sand)" />
+        <path d="M 0 54 C 20 38 40 34 52 40 Q 60 46 68 40 C 80 34 100 38 120 54 L 120 84 L 0 84 Z" fill="var(--hg2-sand)" />
+        {/* the crater where the sand drains into the neck */}
+        <ellipse cx="60" cy="43.4" rx="4.2" ry="1.3" fill="#000" opacity="0.14" />
+        {full && <SurfaceSliders list={SLIDERS_2D} fill="rgba(0,0,0,0.26)" />}
       </g>
       {incoming.map((g, i) => (
         <circle key={`i${i}`} className="grain in" cx={g.x} cy={top + 2} r={g.r} fill="var(--hg2-sand)"
@@ -182,11 +214,14 @@ function HourglassClassic({ running, size, className, title, detail }: { running
 
       {/* the pile in the upper bulb */}
       <g clipPath={`url(#${clip})`}>
-        <path className="surface flat-only" d="M 0 38 Q 60 62 120 38 L 120 84 L 0 84 Z" fill="var(--sand-2)" />
+        <path className="flat-only" d="M 0 38 Q 60 62 120 38 L 120 84 L 0 84 Z" fill="var(--sand-2)" />
         <g className="gloss-only">
-          <path className="surface" d="M 0 38 Q 60 62 120 38 L 120 84 L 0 84 Z" fill={`url(#${sand})`} />
+          <path d="M 0 38 Q 60 62 120 38 L 120 84 L 0 84 Z" fill={`url(#${sand})`} />
           <path d="M 30 44 Q 60 58 90 44" fill="none" stroke="var(--sand-1)" strokeOpacity="0.7" strokeWidth="1.2" />
         </g>
+        {/* the crater above the neck, and grains sliding into it */}
+        <ellipse cx="60" cy="50.9" rx="5" ry="1.4" fill="#000" opacity="0.13" />
+        {full && <SurfaceSliders list={SLIDERS_CLASSIC} fill="var(--sand-3)" />}
       </g>
 
       {incoming.map((g, i) => (
