@@ -8,11 +8,18 @@ import type {
 import { DEFAULT_SETTINGS } from '../lib/types'
 import { t } from '../i18n'
 import { makeUploadParts } from '../lib/media'
+import type { UploadPart } from '../lib/backend/types'
+import { allJobs, askPersist, deleteJob, freeBytes, mb, putJob, type UploadJob } from '../lib/uploadQueue'
 
 export type Phase = 'booting' | 'signedOut' | 'loading' | 'ready'
 
 export interface Toast { id: number; text: string; tone?: 'info' | 'error'; action?: { label: string; run: () => void } }
-export interface Upload { id: string; itemId: string; name: string; progress: number; error?: string }
+export interface PendingUpload {
+  id: string; itemId: string; name: string; kind: 'photo' | 'video'; created_at: string; width: number | null; height: number | null
+  /** stored on this device (survives closing the app) */
+  persisted: boolean
+  status: 'waiting' | 'uploading' | 'error'; progress: number; error?: string
+}
 
 const emptySnap = (): Snapshot => ({
   items: [], statuses: [], sessions: [], media: [], cost_lines: [], templates: [], share_links: [], settings: { ...DEFAULT_SETTINGS },
@@ -25,7 +32,8 @@ interface State {
   health: HealthState
   wakeError: string | null
   toasts: Toast[]
-  uploads: Upload[]
+  /** Photos/videos waiting to upload (shown from the local copy). */
+  pending: PendingUpload[]
   urls: Record<string, string>
   /** Changes made offline that are waiting to be sent. */
   queued: number
@@ -41,7 +49,7 @@ export const useApp = create<State>(() => ({
   health: 'up',
   wakeError: null,
   toasts: [],
-  uploads: [],
+  pending: [],
   urls: {},
   queued: 0,
 }))
@@ -201,7 +209,7 @@ export async function boot() {
   backend.onAuthChange((user) => {
     const prev = get().user
     set({ user })
-    if (user && (!prev || prev.id !== user.id)) void flush().then(loadData)
+    if (user && (!prev || prev.id !== user.id)) void flush().then(loadData).then(restoreUploads)
     if (!user && prev) {
       set({ phase: 'signedOut', data: emptySnap() })
       unsubRemote?.(); unsubRemote = null
@@ -220,6 +228,7 @@ export async function boot() {
     if (user && cached && cached.user.id === user.id) {
       // Offline (or asleep): open the last copy of the gallery; changes queue up and sync later.
       set({ user, data: cached.data, phase: 'ready' })
+      void restoreUploads()
       return
     }
     set({ user, phase: user ? 'loading' : 'signedOut' })
@@ -231,6 +240,7 @@ export async function boot() {
   if (cached && cached.user.id === user.id) set({ data: cached.data, phase: 'ready' }) // instant first paint
   await flush()
   await loadData()
+  await restoreUploads()
 }
 
 export function loadData(): Promise<void> {
@@ -281,6 +291,7 @@ export async function resync() {
     else { if (get().phase === 'loading') set({ phase: 'signedOut' }); return }
   }
   if (hadQueue && !outbox.length) toast(t('sync.synced'))
+  void processUploads()
   if (get().phase !== 'ready') await loadData()
   else scheduleRemoteReload()
 }
@@ -405,6 +416,7 @@ export async function deleteItem(id: string) {
   const running = d.sessions.find((s) => !s.ended_at && ids.has(s.item_id))
   if (running) await stopTimer()
   const keys = media.flatMap((m) => [m.object_key, m.thumb_key].filter(Boolean) as string[])
+  for (const pu of get().pending) if (ids.has(pu.itemId)) void dropJob(pu.id)
   await commit(
     (s) => ({
       ...s,
@@ -468,60 +480,155 @@ export function deleteSession(id: string) {
   return commit((s) => ({ ...s, sessions: s.sessions.filter((x) => x.id !== id) }), [{ k: 'remove', table: 'sessions', ids: [id] }])
 }
 
-// ---------------------------------------------------------------- media
-const uploadFilesById = new Map<string, File>()
+// ---------------------------------------------------------------- media (offline-capable upload queue)
+/**
+ * Every picked photo/video becomes an upload job: original + thumbnail are stored in IndexedDB at once
+ * and shown from the local copy. Jobs upload one by one whenever we are online (now, on reconnect, on
+ * app open, every 30 s), then the media row is saved and the local copy is dropped.
+ */
+const jobBlobs = new Map<string, UploadJob>() // jobs of this session (also the in-memory fallback)
+let processing: Promise<void> | null = null
+let uploadTimer: ReturnType<typeof setInterval> | undefined
 
-async function runUpload(uid: string, itemId: string, file: File) {
-  const setU = (patch: Partial<Upload>) => set((s) => ({ uploads: s.uploads.map((u) => (u.id === uid ? { ...u, ...patch } : u)) }))
-  setU({ progress: 0, error: undefined })
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) { setU({ error: t('upload.offline') }); return }
-  let res: Awaited<ReturnType<typeof backend.uploadMedia>> | null = null
-  try {
-    const prep = await makeUploadParts(file)
-    res = await backend.uploadMedia(itemId, prep.parts, (p) => setU({ progress: p }))
-    const row: Media = {
-      id: uuid(), item_id: itemId, object_key: res.object_key, thumb_key: res.thumb_key, kind: prep.kind,
-      mime: file.type, size_bytes: file.size, width: prep.width, height: prep.height, duration_s: prep.duration,
-      phase: 'process', created_at: now(),
-    }
-    try {
-      await backend.insert('media', [row])
-    } catch (e) {
-      if (!isNetworkError(e)) throw e
-      outbox.push({ op: { k: 'insert', table: 'media', rows: [row] }, at: Date.now(), uid: get().user?.id ?? '' }) // stored; row syncs later
-      saveOutbox()
-    }
-    set((s) => ({ data: { ...s.data, media: [...s.data.media, row] }, uploads: s.uploads.filter((u) => u.id !== uid) }))
-    uploadFilesById.delete(uid)
-    lastLocalWrite = Date.now()
-    // First photo becomes the cover automatically.
-    const it = get().data.items.find((i) => i.id === itemId)
-    if (it && !it.cover_media_id) void updateItem(itemId, { cover_media_id: row.id })
-  } catch (e) {
-    // Final failure: nothing may stay behind in storage without a row pointing at it.
-    if (res) await backend.deleteMediaObjects([res.object_key, res.thumb_key].filter(Boolean) as string[]).catch(() => {})
-    console.error('upload failed', e)
-    setU({ error: isNetworkError(e) ? t('upload.offline') : t('upload.failed') })
+function localKeys(id: string) { return { object_key: `local:${id}`, thumb_key: `local:${id}:t` } }
+
+function addPending(job: UploadJob, persisted: boolean, status: PendingUpload['status'] = 'waiting', error?: string) {
+  const keys = localKeys(job.id)
+  const urls: Record<string, string> = { [keys.object_key]: URL.createObjectURL(job.original) }
+  if (job.thumb) urls[keys.thumb_key] = URL.createObjectURL(job.thumb)
+  jobBlobs.set(job.id, job)
+  set((s) => ({
+    urls: { ...s.urls, ...urls },
+    pending: [...s.pending.filter((x) => x.id !== job.id), {
+      id: job.id, itemId: job.itemId, name: job.name, kind: job.kind, created_at: job.created_at,
+      width: job.width, height: job.height, persisted, status, progress: 0, error,
+    }],
+  }))
+}
+const setPending = (id: string, patch: Partial<PendingUpload>) => set((s) => ({ pending: s.pending.map((x) => (x.id === id ? { ...x, ...patch } : x)) }))
+
+/** Media-like rows for pending uploads (so tiles and covers can show them from the local copy). */
+export function pendingAsMedia(p: PendingUpload): Media {
+  const keys = localKeys(p.id)
+  return {
+    id: p.id, item_id: p.itemId, object_key: keys.object_key, thumb_key: jobBlobs.get(p.id)?.thumb ? keys.thumb_key : null, kind: p.kind,
+    mime: '', size_bytes: 0, width: p.width, height: p.height, duration_s: null, phase: 'process', created_at: p.created_at,
   }
 }
 
 export async function uploadFiles(itemId: string, files: File[]) {
+  askPersist()
   const accepted = files.filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'))
-  await Promise.all(accepted.map((file) => {
-    const uid = uuid()
-    uploadFilesById.set(uid, file)
-    set((s) => ({ uploads: [...s.uploads, { id: uid, itemId, name: file.name, progress: 0 }] }))
-    return runUpload(uid, itemId, file)
-  }))
+  for (const file of accepted) {
+    const prep = await makeUploadParts(file)
+    const thumb = prep.parts.find((x) => x.role === 'thumb')
+    const job: UploadJob = {
+      id: uuid(), uid: get().user?.id ?? '', itemId, name: file.name, mime: file.type || 'application/octet-stream', size: file.size,
+      kind: prep.kind, ext: prep.parts[0].ext, thumbType: thumb?.contentType ?? null, thumbExt: thumb?.ext ?? null,
+      width: prep.width, height: prep.height, duration: prep.duration, created_at: now(), original: file, thumb: thumb?.blob ?? null,
+    }
+    // Keep a copy on the device so it survives closing the app; check there is room first.
+    const need = file.size + (thumb?.blob.size ?? 0) + 2 * 1048576
+    const free = await freeBytes()
+    let persisted = false
+    if (free === null || free > need) {
+      try { await putJob(job); persisted = true } catch (e) { console.warn('could not store upload offline', e) }
+    }
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false
+    if (!persisted && offline) {
+      addPending(job, false, 'error', t('upload.noSpace', { need: mb(need), free: free === null ? '?' : mb(free) }))
+    } else {
+      addPending(job, persisted)
+      if (!persisted) toast(t('upload.notKept', { name: file.name }), 'info')
+    }
+  }
+  void processUploads()
 }
-export function retryUpload(uid: string) {
-  const u = get().uploads.find((x) => x.id === uid)
-  const f = uploadFilesById.get(uid)
-  if (u && f) void runUpload(uid, u.itemId, f)
+
+async function uploadOne(id: string) {
+  const job = jobBlobs.get(id)
+  if (!job) return
+  const item = get().data.items.find((i) => i.id === job.itemId)
+  if (!item) { await dropJob(id); return } // its item was deleted meanwhile
+  setPending(id, { status: 'uploading', progress: 0, error: undefined })
+  try {
+    if (!job.object_key) {
+      const parts: UploadPart[] = [{ role: 'original', blob: job.original, contentType: job.mime, ext: job.ext }]
+      if (job.thumb && job.thumbType && job.thumbExt) parts.push({ role: 'thumb', blob: job.thumb, contentType: job.thumbType, ext: job.thumbExt })
+      const res = await backend.uploadMedia(job.itemId, parts, (pr) => setPending(id, { progress: pr }))
+      job.object_key = res.object_key
+      job.thumb_key = res.thumb_key
+      await putJob(job).catch(() => {}) // remember the stored keys: a retry then only saves the row
+    }
+    const row: Media = {
+      id: job.id, item_id: job.itemId, object_key: job.object_key, thumb_key: job.thumb_key ?? null, kind: job.kind,
+      mime: job.mime, size_bytes: job.size, width: job.width, height: job.height, duration_s: job.duration,
+      phase: 'process', created_at: job.created_at,
+    }
+    await backend.insert('media', [row])
+    // Swap to the stored copy; reuse the local blob URLs so the picture does not flicker.
+    const keys = localKeys(id)
+    set((s) => ({
+      data: { ...s.data, media: [...s.data.media.filter((m) => m.id !== id), row] },
+      pending: s.pending.filter((x) => x.id !== id),
+      urls: { ...s.urls, [row.object_key]: s.urls[keys.object_key], ...(row.thumb_key && s.urls[keys.thumb_key] ? { [row.thumb_key]: s.urls[keys.thumb_key] } : {}) },
+    }))
+    lastLocalWrite = Date.now()
+    await deleteJob(id)
+    jobBlobs.delete(id)
+    const it = get().data.items.find((i) => i.id === job.itemId)
+    if (it && !it.cover_media_id) void updateItem(job.itemId, { cover_media_id: row.id })
+  } catch (e) {
+    if (isNetworkError(e)) { setPending(id, { status: 'waiting', progress: 0 }); throw e }
+    console.error('upload failed', e)
+    if (job.object_key) { // stored but the row was refused (e.g. item gone): remove the files
+      await backend.deleteMediaObjects([job.object_key, job.thumb_key].filter(Boolean) as string[]).catch(() => {})
+      job.object_key = undefined; job.thumb_key = undefined
+      await putJob(job).catch(() => {})
+    }
+    setPending(id, { status: 'error', error: t('upload.failed') })
+  }
 }
-export function dismissUpload(uid: string) {
-  uploadFilesById.delete(uid)
-  set((s) => ({ uploads: s.uploads.filter((u) => u.id !== uid) }))
+
+/** Uploads waiting jobs in order. Stops at the first network failure (tried again later). */
+export function processUploads(): Promise<void> {
+  if (processing) return processing
+  processing = (async () => {
+    for (;;) {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) break
+      const next = [...get().pending].sort((a, b) => a.created_at.localeCompare(b.created_at)).find((x) => x.status === 'waiting')
+      if (!next || !get().user) break
+      try { await uploadOne(next.id) } catch { if (get().health === 'up') set({ health: 'unreachable' }); break }
+    }
+  })().finally(() => { processing = null })
+  if (!uploadTimer) uploadTimer = setInterval(() => { if (get().pending.some((x) => x.status === 'waiting')) void processUploads() }, 30_000)
+  return processing
+}
+
+/** On app open: bring back jobs saved on this device for the signed-in user. */
+export async function restoreUploads() {
+  const uid = get().user?.id
+  if (!uid) return
+  const jobs = await allJobs()
+  for (const j of jobs) if (j.uid === uid && !jobBlobs.has(j.id)) addPending(j, true)
+  if (jobs.length) void processUploads()
+}
+
+async function dropJob(id: string) {
+  const keys = localKeys(id)
+  const u = get().urls
+  for (const k of [keys.object_key, keys.thumb_key]) if (u[k]) URL.revokeObjectURL(u[k])
+  jobBlobs.delete(id)
+  set((s) => ({ pending: s.pending.filter((x) => x.id !== id) }))
+  await deleteJob(id)
+}
+
+export function retryUpload(id: string) {
+  setPending(id, { status: 'waiting', error: undefined })
+  void processUploads()
+}
+export function dismissUpload(id: string) {
+  void dropJob(id)
 }
 
 export function updateMedia(id: string, patch: Partial<Media>) {
@@ -548,7 +655,7 @@ const inflight = new Set<string>()
 /** Ensures URLs for the given storage keys are in the store (batched). */
 export async function ensureUrls(keys: string[]) {
   const have = get().urls
-  const need = [...new Set(keys)].filter((k) => k && !have[k] && !inflight.has(k))
+  const need = [...new Set(keys)].filter((k) => k && !k.startsWith('local:') && !have[k] && !inflight.has(k))
   if (!need.length) return
   need.forEach((k) => inflight.add(k))
   try {

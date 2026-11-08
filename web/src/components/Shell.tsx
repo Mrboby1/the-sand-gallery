@@ -58,13 +58,13 @@ export function HeaderActions() {
 export function WakeLayer() {
   const health = useApp((s) => s.health)
   const err = useApp((s) => s.wakeError)
-  const queued = useApp((s) => s.queued)
+  const queued = useApp((s) => s.queued + s.pending.filter((p) => p.status !== 'error').length)
   const phase = useApp((s) => s.phase)
   if (health === 'up') return null
   if (health === 'unreachable') {
     // Offline: a small pill, the (cached) gallery stays usable underneath.
     return (
-      <div role="status" className="pointer-events-none fixed inset-x-0 top-[calc(3.9rem+env(safe-area-inset-top))] z-40 flex justify-center px-3">
+      <div role="status" className="pointer-events-none fixed inset-x-0 top-[calc(3.9rem+env(safe-area-inset-top))] z-40 flex justify-end px-3 sm:justify-center">
         <div className="rise pointer-events-auto flex max-w-md items-center gap-2.5 rounded-full bg-[#2a2017] py-1.5 pl-3.5 pr-1.5 text-[13px] text-[#f3e9da] shadow-lift dark:bg-[#f3e9da] dark:text-[#2a2017]">
           <WifiOff size={15} className="shrink-0" />
           <span className="min-w-0">{phase === 'ready' ? (queued ? tn('sync.pending', queued) : t('sync.offlineShort')) : t('wake.offline')}</span>

@@ -216,6 +216,10 @@ export const en = {
   'error.save': 'That change could not be saved. Please try again.',
   'upload.offline': 'Offline: tap retry when you are back',
   'upload.failed': 'Upload failed',
+  'upload.waiting': 'Waiting',
+  'upload.waitingKept': 'Saved on this device; uploads when you are online',
+  'upload.noSpace': 'Not enough space on this device to keep this file offline (needs {need}, {free} free). Upload it when you are online.',
+  'upload.notKept': '"{name}" is too big to keep on this device. Keep the app open until it has uploaded.',
   'upload.retry': 'Retry',
   'upload.dismiss': 'Remove',
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useApp, ensureUrls } from '../store/app'
+import { useApp, ensureUrls, pendingAsMedia } from '../store/app'
 import { chainUp, closedTotals, overlapMs, sessionMs, startOfWeek } from './time'
 import type { Item, Media } from './types'
 
@@ -63,7 +63,10 @@ export function useWeekTotal(itemIds?: Set<string>) {
 /** Picks the media to show on an item's tile: its cover, else its newest photo, else a descendant's. */
 export function useCoverFor() {
   const items = useApp((s) => s.data.items)
-  const media = useApp((s) => s.data.media)
+  const stored = useApp((s) => s.data.media)
+  const pending = useApp((s) => s.pending)
+  // photos still waiting to upload count too, so a new item shows its picture right away
+  const media = useMemo(() => (pending.length ? [...stored, ...pending.map(pendingAsMedia)] : stored), [stored, pending])
   return useMemo(() => {
     const byItem = new Map<string, Media[]>()
     for (const m of media) byItem.set(m.item_id, [...(byItem.get(m.item_id) ?? []), m])

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertCircle, ChevronLeft, ChevronRight, ExternalLink, Image as ImageIcon, Play, RotateCw, Star, Trash2, Upload, X } from 'lucide-react'
+import { AlertCircle, ChevronLeft, ChevronRight, CloudUpload, ExternalLink, Image as ImageIcon, Play, RotateCw, Star, Trash2, Upload, X } from 'lucide-react'
 import type { Item, Media } from '../lib/types'
-import { useApp, deleteMedia, dismissUpload, retryUpload, updateItem, updateMedia, uploadFiles } from '../store/app'
+import { useApp, deleteMedia, dismissUpload, pendingAsMedia, retryUpload, updateItem, updateMedia, uploadFiles } from '../store/app'
 import { useMediaUrl } from '../lib/hooks'
 import { Thumb } from './Tile'
 import { Button, IconButton, confirmDialog, cx } from './ui'
@@ -22,8 +22,8 @@ export function UploadButton({ itemId, size = 'md' }: { itemId: string; size?: '
 
 export function MediaSection({ item }: { item: Item }) {
   const all = useApp((s) => s.data.media)
-  const allUploads = useApp((s) => s.uploads)
-  const uploads = allUploads.filter((u) => u.itemId === item.id)
+  const allPending = useApp((s) => s.pending)
+  const uploads = allPending.filter((u) => u.itemId === item.id)
   const [filter, setFilter] = useState<Filter>('all')
   const [open, setOpen] = useState<number | null>(null)
   const [drag, setDrag] = useState(false)
@@ -81,23 +81,29 @@ export function MediaSection({ item }: { item: Item }) {
             </button>
           ))}
           {uploads.map((u) => (
-            <div key={u.id} className="relative flex aspect-square flex-col items-center justify-center gap-1.5 bg-surface-2 p-2 text-center">
-              {u.error ? (
+            <div key={u.id} className="relative flex aspect-square flex-col items-center justify-center gap-1.5 overflow-hidden bg-surface-2 p-2 text-center">
+              {/* the picture itself, from the copy kept on this device */}
+              <Thumb media={pendingAsMedia(u)} alt={u.name} className={cx('absolute inset-0 h-full w-full', u.status === 'error' ? 'opacity-25' : 'opacity-80')} />
+              {u.status === 'waiting' && (
+                <span className="absolute bottom-1.5 left-1.5 right-1.5 inline-flex items-center justify-center gap-1 rounded-full bg-[#2a2017]/80 px-2 py-0.5 text-[10px] font-medium text-white" title={u.persisted ? t('upload.waitingKept') : t('upload.waiting')}>
+                  <CloudUpload size={11} className="shrink-0" /> <span className="truncate">{t('upload.waiting')}</span>
+                </span>
+              )}
+              {u.status === 'error' ? (
                 <>
-                  <AlertCircle size={22} className="text-danger" />
-                  <span className="line-clamp-2 text-[11px] leading-tight text-ink">{u.error}</span>
-                  <div className="flex gap-1">
+                  <AlertCircle size={22} className="relative text-danger" />
+                  <span className="relative line-clamp-3 text-[11px] leading-tight text-ink">{u.error}</span>
+                  <div className="relative flex gap-1">
                     <button onClick={() => retryUpload(u.id)} aria-label={`${t('upload.retry')} ${u.name}`} className="inline-flex h-7 items-center gap-1 rounded-full bg-primary px-2.5 text-[11px] font-medium text-on-primary"><RotateCw size={12} /> {t('upload.retry')}</button>
                     <button onClick={() => dismissUpload(u.id)} aria-label={`${t('upload.dismiss')} ${u.name}`} title={t('upload.dismiss')} className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-surface text-muted"><X size={13} /></button>
                   </div>
                 </>
-              ) : (
-                <svg viewBox="0 0 36 36" className="h-12 w-12 -rotate-90" role="progressbar" aria-valuenow={Math.round(u.progress * 100)} aria-label={u.name}>
+              ) : u.status === 'uploading' && (
+                <svg viewBox="0 0 36 36" className="relative h-12 w-12 -rotate-90 drop-shadow" role="progressbar" aria-valuenow={Math.round(u.progress * 100)} aria-label={u.name}>
                   <circle cx="18" cy="18" r="15" fill="none" stroke="var(--sg-line)" strokeWidth="3" />
                   <circle cx="18" cy="18" r="15" fill="none" stroke="var(--sg-accent)" strokeWidth="3" strokeLinecap="round" strokeDasharray={`${u.progress * 94.2} 94.2`} />
                 </svg>
               )}
-              <span className="absolute bottom-1 inset-x-1 truncate text-center text-[10px] text-muted">{u.name}</span>
             </div>
           ))}
         </div>
