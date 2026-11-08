@@ -43,12 +43,20 @@ export function SettingsPage() {
     <div className="min-h-full pb-24">
       <TopBar back="/" title={t('settings.title')} />
       <main className="mx-auto max-w-6xl columns-1 gap-4 px-4 pt-4 sm:px-6 lg:columns-2 [&>*]:mb-4 [&>*]:break-inside-avoid">
-        <Section title={t('settings.statuses')} hint={t('settings.statusesHint')}>
+        <Section title={t('settings.statuses')} hint={`${t('settings.statusesHint')} ${t('settings.finishedHint')}`}>
           <div className="flex flex-col gap-2">
             {statuses.map((st, i) => (
               <div key={st.id} className="flex items-center gap-2">
                 <ColorPicker value={st.color} onChange={(c) => updateStatus(st.id, { color: c })} />
                 <Input defaultValue={st.name} key={st.name} onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== st.name) void updateStatus(st.id, { name: v }) }} className="h-10" aria-label={t('settings.statusName')} />
+                <button
+                  onClick={() => updateStatus(st.id, { is_finished: !st.is_finished })}
+                  aria-pressed={!!st.is_finished}
+                  title={t('settings.finishedHint')}
+                  className={cx('inline-flex h-9 shrink-0 items-center gap-1 rounded-full border px-2.5 text-[12px] font-medium transition', st.is_finished ? 'border-transparent bg-primary text-on-primary' : 'border-line text-muted hover:bg-surface-2')}
+                >
+                  {st.is_finished && <Check size={13} />} {t('settings.finished')}
+                </button>
                 <IconButton label="Move up" disabled={i === 0} onClick={() => moveStatus(st.id, -1)} className="h-9 w-9 disabled:opacity-30"><ArrowUp size={16} /></IconButton>
                 <IconButton label="Move down" disabled={i === statuses.length - 1} onClick={() => moveStatus(st.id, 1)} className="h-9 w-9 disabled:opacity-30"><ArrowDown size={16} /></IconButton>
                 <IconButton

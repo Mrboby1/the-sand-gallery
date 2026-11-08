@@ -17,7 +17,7 @@ function emptyDB(): DB {
   const now = new Date().toISOString()
   return {
     items: [],
-    statuses: DEFAULT_STATUSES.map((s, i) => ({ id: crypto.randomUUID(), name: s.name, color: s.color, sort_order: i, created_at: now })),
+    statuses: DEFAULT_STATUSES.map((s, i) => ({ id: crypto.randomUUID(), name: s.name, color: s.color, is_finished: s.is_finished, sort_order: i, created_at: now })),
     sessions: [],
     media: [],
     cost_lines: [],

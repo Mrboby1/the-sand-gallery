@@ -7,6 +7,7 @@ import { HeaderActions, TopBar } from '../components/Shell'
 import { ItemsView } from '../components/ItemsView'
 import { ViewSwitcher, type ViewMode } from '../components/ViewSwitcher'
 import { NewItemSheet, allTags } from '../components/ItemBits'
+import { AddMenu } from '../components/AddMenu'
 import { Hourglass, HourglassGlyph } from '../components/Hourglass'
 import { Button, Empty, cx } from '../components/ui'
 import { t } from '../i18n'
@@ -43,7 +44,7 @@ export function Home() {
               <span>{t('home.week')}: <span className="font-semibold text-ink tabular">{fmtDuration(week)}</span></span>
             </div>
           </div>
-          <div className="hidden sm:block"><Button variant="primary" onClick={() => setNewOpen(true)}><Plus size={18} /> {t('item.new')}</Button></div>
+          <AddMenu parentId={null} />
         </div>
 
         {items.length > 0 && (
@@ -65,20 +66,13 @@ export function Home() {
 
         {items.length === 0 ? (
           <Empty icon={<Hourglass size={90} running />} title={t('home.empty.title')} body={t('home.empty.body')}>
-            <Button variant="primary" size="lg" onClick={() => setNewOpen(true)}><Plus size={18} /> {t('item.new')}</Button>
+            <Button variant="primary" size="lg" onClick={() => setNewOpen(true)}><Plus size={18} /> {t('add.firstProject')}</Button>
           </Empty>
         ) : (
           <ItemsView items={shown} view={view} pathOf={tag ? pathOf : undefined} />
         )}
       </main>
 
-      <button
-        aria-label={t('item.new')}
-        onClick={() => setNewOpen(true)}
-        className="fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-5 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-on-primary shadow-lift transition active:scale-95 sm:hidden"
-      >
-        <Plus size={26} />
-      </button>
       <NewItemSheet open={newOpen} onClose={() => setNewOpen(false)} parentId={null} />
     </div>
   )

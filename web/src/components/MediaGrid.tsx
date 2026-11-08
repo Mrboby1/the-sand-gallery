@@ -116,7 +116,8 @@ export function MediaSection({ item }: { item: Item }) {
   )
 }
 
-function Lightbox({ list, index, item, onIndex, onClose }: { list: Media[]; index: number; item: Item; onIndex: (i: number) => void; onClose: () => void }) {
+/** Full-screen viewer. `readOnly` (gallery mode) hides the editing actions. */
+export function Lightbox({ list, index, item, onIndex, onClose, readOnly }: { list: Media[]; index: number; item: Item; onIndex: (i: number) => void; onClose: () => void; readOnly?: boolean }) {
   const m = list[index]
   const url = useMediaUrl(m.object_key)
   const thumb = useMediaUrl(m.thumb_key)
@@ -167,6 +168,11 @@ function Lightbox({ list, index, item, onIndex, onClose }: { list: Media[]; inde
         {index > 0 && <button aria-label="Previous" onClick={prev} className="absolute left-3 hidden h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 sm:flex"><ChevronLeft /></button>}
         {index < list.length - 1 && <button aria-label="Next" onClick={next} className="absolute right-3 hidden h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 sm:flex"><ChevronRight /></button>}
       </div>
+      {readOnly ? (
+        <div className="flex items-center justify-center gap-2 px-3 py-3 safe-bottom">
+          {url && <LbButton label={t('gallery.download')} onClick={() => window.open(url, '_blank', 'noopener')}><ExternalLink size={16} /></LbButton>}
+        </div>
+      ) : (
       <div className="flex flex-wrap items-center justify-center gap-2 px-3 py-3 safe-bottom">
         <LbButton onClick={() => updateItem(item.id, { cover_media_id: isCover ? null : m.id })} active={isCover}>
           <Star size={16} fill={isCover ? 'currentColor' : 'none'} /> {isCover ? t('gallery.isCover') : t('gallery.setCover')}
@@ -193,6 +199,7 @@ function Lightbox({ list, index, item, onIndex, onClose }: { list: Media[]; inde
           <Trash2 size={16} />
         </LbButton>
       </div>
+      )}
     </div>,
     document.body,
   )

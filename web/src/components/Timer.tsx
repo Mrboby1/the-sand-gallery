@@ -113,7 +113,7 @@ export function RunningChip() {
   if (onItemPage) return null
   const isItemRoute = loc.pathname.startsWith('/i/')
   return (
-    <div className={cx('pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4', isItemRoute ? 'bottom-[calc(4.25rem+env(safe-area-inset-bottom))]' : 'bottom-[calc(1.5rem+env(safe-area-inset-bottom))] justify-start pr-24 sm:justify-center sm:pr-4')}>
+    <div className={cx('pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4', isItemRoute ? 'bottom-[calc(5.25rem+env(safe-area-inset-bottom))] justify-start pr-24 sm:justify-center sm:pr-4' : 'bottom-[calc(1.5rem+env(safe-area-inset-bottom))] justify-start pr-24 sm:justify-center sm:pr-4')}>
       <div className="rise pointer-events-auto flex max-w-md items-center gap-2 rounded-full bg-[#2a2017] py-1.5 pl-2 pr-1.5 text-[#f3e9da] shadow-lift dark:bg-[#f3e9da] dark:text-[#2a2017]">
         <Link to={`/i/${item.id}`} className="flex min-w-0 items-center gap-2 [--glass-line:#e8c79a] [--rim:#e8c79a] dark:[--glass-line:#7a5634] dark:[--rim:#7a5634]">
           <Hourglass running size={20} detail="lite" />

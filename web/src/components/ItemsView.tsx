@@ -6,7 +6,8 @@ import {
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
 import type { Item, Status } from '../lib/types'
 import { useApp, updateItem } from '../store/app'
-import { useCoverFor, useTotals } from '../lib/hooks'
+import { useCoverFor, useIsFinished, useTotals } from '../lib/hooks'
+import { AlbumTile } from './FinishedView'
 import { fmtDuration, overlapMs, startOfWeek, ymd } from '../lib/time'
 import { ItemRow, ItemTile, Thumb } from './Tile'
 import { HourglassGlyph } from './Hourglass'
@@ -22,6 +23,7 @@ export function ItemsView({ items, view, scopeIds, pathOf, rootId }: { items: It
   const covers = useCoverFor()
   const totals = useTotals()
   const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses])
+  const isFinished = useIsFinished()
 
   if (view === 'board') return <Board items={items} statuses={statuses} />
   if (view === 'calendar') return <CalendarView items={items} scopeIds={scopeIds} rootId={rootId} />
@@ -50,7 +52,9 @@ export function ItemsView({ items, view, scopeIds, pathOf, rootId }: { items: It
         size === 'l' && 'grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 sm:gap-x-5',
       )}
     >
-      {items.map((it) => (
+      {items.map((it) => isFinished(it.id) ? (
+        <AlbumTile key={it.id} item={it} size={size} cover={covers.cover(it)} count={covers.countMedia(it.id)} />
+      ) : (
         <ItemTile
           key={it.id} item={it} size={size} status={it.status_id ? statusById.get(it.status_id) : null} cover={covers.cover(it)}
           total={totals.total(it.id)} running={totals.runningItemId === it.id} ticking={totals.runningChain.has(it.id)}

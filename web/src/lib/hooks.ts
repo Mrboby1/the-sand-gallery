@@ -90,6 +90,28 @@ export function useCoverFor() {
   }, [items, media])
 }
 
+/**
+ * True when an item is "finished" (its status, or an ancestor's, counts as finished): such items are
+ * shown as a pure gallery instead of a project.
+ */
+export function useIsFinished() {
+  const items = useApp((s) => s.data.items)
+  const statuses = useApp((s) => s.data.statuses)
+  return useMemo(() => {
+    const byId = new Map(items.map((i) => [i.id, i]))
+    const fin = new Set(statuses.filter((s) => s.is_finished).map((s) => s.id))
+    const memo = new Map<string, boolean>()
+    const check = (id: string, depth = 0): boolean => {
+      if (memo.has(id)) return memo.get(id)!
+      const it = byId.get(id)
+      const v = !!it && ((!!it.status_id && fin.has(it.status_id)) || (!!it.parent_id && depth < 50 && check(it.parent_id, depth + 1)))
+      memo.set(id, v)
+      return v
+    }
+    return (id: string) => check(id)
+  }, [items, statuses])
+}
+
 /** Returns a displayable URL for a storage key (loads it lazily). */
 export function useMediaUrl(key: string | null | undefined): string | undefined {
   const url = useApp((s) => (key ? s.urls[key] : undefined))

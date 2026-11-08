@@ -9,6 +9,8 @@ export interface Status {
   name: string
   color: string
   sort_order: number
+  /** Items with this status switch to the pure gallery view. */
+  is_finished?: boolean
   created_at?: ISODate
 }
 
@@ -25,6 +27,8 @@ export interface Item {
   sort_order: number
   created_at: ISODate
   updated_at: ISODate
+  /** Set (by the database) when the item gets a finished status. */
+  finished_at?: ISODate | null
 }
 
 export interface Session {
@@ -147,10 +151,10 @@ export const DEFAULT_SETTINGS: Settings = {
   due_dates_enabled: false,
 }
 
-export const DEFAULT_STATUSES: Pick<Status, 'name' | 'color'>[] = [
-  { name: 'Idea', color: '#9b87c9' },
-  { name: 'In progress', color: '#d9903d' },
-  { name: 'On hold', color: '#8f9aa6' },
-  { name: 'Done', color: '#5f9e6e' },
-  { name: 'Sold', color: '#c0564a' },
+export const DEFAULT_STATUSES: Pick<Status, 'name' | 'color' | 'is_finished'>[] = [
+  { name: 'Idea', color: '#9b87c9', is_finished: false },
+  { name: 'In progress', color: '#d9903d', is_finished: false },
+  { name: 'On hold', color: '#8f9aa6', is_finished: false },
+  { name: 'Done', color: '#5f9e6e', is_finished: true },
+  { name: 'Sold', color: '#c0564a', is_finished: true },
 ]

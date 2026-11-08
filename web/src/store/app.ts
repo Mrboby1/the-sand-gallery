@@ -397,8 +397,15 @@ export async function createItem(parentId: string | null, title: string, templat
 }
 
 export function updateItem(id: string, patch: Partial<Item>) {
+  // finished_at is kept by the database; mirror it locally so the gallery view switches at once
+  const fin = (sid: string | null | undefined) => !!get().data.statuses.find((x) => x.id === sid)?.is_finished
+  const local = (i: Item): Item => {
+    const next = { ...i, ...patch, updated_at: now() }
+    if ('status_id' in patch) next.finished_at = fin(patch.status_id) ? (fin(i.status_id) ? i.finished_at ?? now() : now()) : null
+    return next
+  }
   return commit(
-    (s) => ({ ...s, items: s.items.map((i) => (i.id === id ? { ...i, ...patch, updated_at: now() } : i)) }),
+    (s) => ({ ...s, items: s.items.map((i) => (i.id === id ? local(i) : i)) }),
     [{ k: 'update', table: 'items', id, patch }],
   )
 }
