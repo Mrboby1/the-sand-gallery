@@ -2,6 +2,13 @@
 import { Resvg } from '@resvg/resvg-js'
 import { writeFileSync } from 'node:fs'
 
+// sand grains: fading in above the top, solid through the glass, fading out below the bottom
+const dots = () => {
+  const out = []
+  for (let y = 2; y <= 44; y += 6.5) out.push(`<circle cx="${60 + Math.sin(y) * 0.6}" cy="${y}" r="2" fill="#d99a4e" opacity="${Math.min(1, (y + 4) / 30).toFixed(2)}"/>`)
+  for (let y = 84; y <= 158; y += 6.5) out.push(`<circle cx="${60 + Math.sin(y * 1.7) * ((y - 84) / 18)}" cy="${y}" r="1.9" fill="#d99a4e" opacity="${Math.max(0.08, Math.min(1, (160 - y) / 30)).toFixed(2)}"/>`)
+  return out.join('')
+}
 const hourglass = (s = 1, tx = 0, ty = 0) => `
 <g transform="translate(${tx} ${ty}) scale(${s})">
   <defs>
@@ -12,8 +19,7 @@ const hourglass = (s = 1, tx = 0, ty = 0) => `
   </defs>
   <path d="M 26 18 C 26 52 56 66 56.5 80 C 56 94 26 108 26 142 L 94 142 C 94 108 64 94 63.5 80 C 64 66 94 52 94 18 Z" fill="#fffaf1"/>
   <g clip-path="url(#c)"><path d="M 0 38 Q 60 62 120 38 L 120 84 L 0 84 Z" fill="#d99a4e"/></g>
-  <line x1="60" y1="0" x2="60" y2="46" stroke="#d99a4e" stroke-width="3.4" stroke-linecap="round" stroke-dasharray="3 4"/>
-  <line x1="60" y1="62" x2="60" y2="156" stroke="url(#fade)" stroke-width="3" stroke-linecap="round" stroke-dasharray="3 4"/>
+  ${dots()}
   <path d="M 26 18 C 26 52 56 66 56.5 80 C 56 94 26 108 26 142 M 94 18 C 94 52 64 66 63.5 80 C 64 94 94 108 94 142" fill="none" stroke="#6b4a2b" stroke-width="3.4" stroke-linecap="round"/>
   <ellipse cx="60" cy="18" rx="35" ry="6" fill="none" stroke="#6b4a2b" stroke-width="4.4"/>
   <ellipse cx="60" cy="142" rx="35" ry="6" fill="none" stroke="#6b4a2b" stroke-width="4.4"/>

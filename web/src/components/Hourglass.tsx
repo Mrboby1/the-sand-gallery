@@ -136,7 +136,7 @@ export function Hourglass({
       {incoming.map((g, i) => (
         <circle
           key={`i${i}`}
-          className="grain"
+          className="grain in"
           cx={g.x}
           cy={inStart}
           r={g.r}
