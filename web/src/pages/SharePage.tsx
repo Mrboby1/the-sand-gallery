@@ -62,16 +62,15 @@ export function SharePage() {
       </header>
       <main className="mx-auto max-w-6xl px-4 pt-4 sm:px-6">
         {view.kids.length > 0 && (
-          <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="mb-8 grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
             {view.kids.map((k) => {
               const c = view.coverOf(k.id)
               return (
-                <button key={k.id} onClick={() => { setAt(k.id); window.scrollTo({ top: 0 }) }} className="rise group relative block overflow-hidden rounded-2xl bg-surface text-left shadow-tile ring-1 ring-line/60">
-                  <div className="relative aspect-[4/5]">
-                    {c ? <img src={c.thumb_url ?? c.url} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" /> : <div className="sand-texture absolute inset-0 flex items-center justify-center text-accent/50"><Layers size={36} strokeWidth={1.4} /></div>}
-                    <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-[#1a120a]/80 to-transparent" />
-                    <div className="absolute inset-x-0 bottom-0 p-3 font-display text-[17px] font-semibold text-white">{k.title}</div>
+                <button key={k.id} onClick={() => { setAt(k.id); window.scrollTo({ top: 0 }) }} className="rise group block text-left">
+                  <div className="relative aspect-square overflow-hidden rounded-2xl bg-surface-2">
+                    {c ? <img src={c.thumb_url ?? c.url} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition group-hover:opacity-90" /> : <div className="absolute inset-0 flex items-center justify-center text-muted/60"><Layers size={34} strokeWidth={1.5} /></div>}
                   </div>
+                  <div className="px-0.5 pt-2.5 text-[15px] font-medium">{k.title}</div>
                 </button>
               )
             })}

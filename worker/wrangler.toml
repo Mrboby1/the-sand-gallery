@@ -1,0 +1,27 @@
+# The Sand Gallery API Worker -> https://api.thesandgallery.workers.dev
+name = "api"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = true
+account_id = "92c0925f1726a45f64556448560d3cd0"
+
+[triggers]
+# daily at 03:00 UTC: keep-alive + JSON backup to B2 sand-gallery/backups/
+crons = ["0 3 * * *"]
+
+[observability]
+enabled = true
+
+[vars]
+SUPABASE_URL = "https://etpckqbzxaqbupvatcuy.supabase.co"
+SUPABASE_REF = "etpckqbzxaqbupvatcuy"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0cGNrcWJ6eGFxYnVwdmF0Y3V5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQxNTQzNDgsImV4cCI6MjEwOTczMDM0OH0.B0nGdU06yayLXeTo8k8RlmaqFu3KJT3YrxCSyUd17Ls"
+ALLOWED_ORIGINS = "https://thesandgallery.pages.dev,https://*.thesandgallery.pages.dev,http://localhost:5173,http://localhost:4173"
+# Filled from infra/CLOUD.md once the B2 bucket exists:
+B2_ENDPOINT = "TBD"
+B2_REGION = "TBD"
+B2_BUCKET = "TBD"
+B2_KEY_ID = "TBD"
+
+# Secrets (set with `wrangler secret put`, piped from infra/get-secret.ps1, never stored here):
+#   SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ACCESS_TOKEN, B2_APPLICATION_KEY

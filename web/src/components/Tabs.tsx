@@ -103,7 +103,7 @@ export function TimeLogTab({ item, hasChildren }: { item: Item; hasChildren: boo
               <span className="text-[13px] font-semibold">{new Date(day).toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short', year: new Date(day).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined })}</span>
               <span className="text-xs tabular text-muted">{fmtDuration(ss.reduce((n, s) => n + sessionMs(s, now), 0))}</span>
             </div>
-            <div className="overflow-hidden rounded-2xl bg-surface ring-1 ring-line/60">
+            <div className="overflow-hidden rounded-2xl bg-surface border border-line">
               {ss.map((s) => (
                 <div key={s.id} className="flex items-center gap-3 border-b border-line/60 px-4 py-2.5 last:border-0">
                   <div className="min-w-0 flex-1">
@@ -198,7 +198,7 @@ export function CostsTab({ item, totalMs }: { item: Item; totalMs: number }) {
 
   return (
     <div className="rise flex flex-col gap-4">
-      <div className="overflow-hidden rounded-3xl bg-surface ring-1 ring-line/60">
+      <div className="overflow-hidden rounded-3xl bg-surface border border-line">
         <div className="flex items-center justify-between px-5 pb-2 pt-4">
           <h3 className="font-display text-lg font-semibold">{t('costs.materials')}</h3>
           <Button size="sm" variant="soft" onClick={() => setFocusId(addCost(item.id, ''))}><Plus size={15} /> {t('costs.add')}</Button>
@@ -221,7 +221,7 @@ export function CostsTab({ item, totalMs }: { item: Item; totalMs: number }) {
         )}
       </div>
 
-      <div className="rounded-3xl bg-surface p-5 ring-1 ring-line/60">
+      <div className="rounded-3xl bg-surface p-5 border border-line">
         <Row label={t('costs.ownMaterials')} value={money(ownSum)} />
         {desc.size > 0 && <Row label={t('costs.subMaterials')} value={money(subSum)} />}
         <Row

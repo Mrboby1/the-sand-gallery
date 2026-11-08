@@ -8,8 +8,6 @@ export function Login() {
   const [busy, setBusy] = useState(false)
   return (
     <div className="relative flex min-h-full flex-col items-center justify-center overflow-hidden px-6 py-16 text-center">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_35%,var(--sg-accent-soft),transparent_60%)]" />
-      <div className="sand-texture pointer-events-none absolute inset-x-0 bottom-0 h-40 opacity-60 [mask-image:linear-gradient(to_top,black,transparent)]" />
       <div className="rise relative flex flex-col items-center">
         <Hourglass running size={120} />
         <h1 className="mt-8 font-display text-[42px] font-semibold leading-none tracking-tight sm:text-5xl">{t('app.name')}</h1>
@@ -20,7 +18,7 @@ export function Login() {
             setBusy(true)
             try { await signIn() } catch (e) { toast(String((e as Error).message ?? e), 'error'); setBusy(false) }
           }}
-          className="mt-10 inline-flex h-13 items-center gap-3 rounded-full bg-surface px-6 py-3.5 text-[15px] font-medium text-ink shadow-lift ring-1 ring-line transition hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-60"
+          className="mt-10 inline-flex h-13 items-center gap-3 rounded-full bg-surface px-6 py-3.5 text-[15px] font-medium text-ink border border-line transition hover:bg-surface-2 active:scale-[0.98] disabled:opacity-60"
         >
           <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden>
             <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />

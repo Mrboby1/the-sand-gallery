@@ -17,7 +17,7 @@ const SWATCHES = ['#9b87c9', '#d9903d', '#8f9aa6', '#5f9e6e', '#c0564a', '#4f8fb
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
-    <section className="rise rounded-3xl bg-surface p-5 ring-1 ring-line/60">
+    <section className="rise rounded-3xl bg-surface p-5 border border-line">
       <h2 className="font-display text-xl font-semibold">{title}</h2>
       {hint && <p className="mt-1 text-[13px] text-muted">{hint}</p>}
       <div className="mt-4">{children}</div>
@@ -167,7 +167,7 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
   const [open, setOpen] = useState(false)
   return (
     <div className="relative">
-      <button aria-label="Color" onClick={() => setOpen((o) => !o)} className="h-9 w-9 shrink-0 rounded-full ring-2 ring-surface shadow-tile" style={{ background: value }} />
+      <button aria-label="Color" onClick={() => setOpen((o) => !o)} className="h-9 w-9 shrink-0 rounded-full ring-2 ring-surface" style={{ background: value }} />
       {open && (
         <div className="rise absolute left-0 top-11 z-30 grid w-48 grid-cols-5 gap-2 rounded-2xl border border-line bg-surface p-3 shadow-lift">
           {SWATCHES.map((c) => (

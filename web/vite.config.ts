@@ -29,7 +29,7 @@ export default defineConfig({
       workbox: {
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png}', '**/*-latin-*.woff2'],
         runtimeCaching: [
           {
             // B2 thumbnails/photos: presigned URLs change their query string, so cache by path only.

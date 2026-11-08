@@ -43,7 +43,7 @@ export function StatusBar({ statuses, value, onChange }: { statuses: Status[]; v
             aria-pressed={active}
             className={cx(
               'inline-flex h-9 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-medium transition active:scale-95',
-              active ? 'border-transparent shadow-tile' : 'border-line bg-surface text-ink hover:bg-surface-2',
+              active ? 'border-transparent' : 'border-line bg-surface text-ink hover:bg-surface-2',
             )}
             style={active ? { background: s.color, color: onColor(s.color) } : undefined}
           >

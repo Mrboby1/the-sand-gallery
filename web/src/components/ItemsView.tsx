@@ -45,9 +45,9 @@ export function ItemsView({ items, view, scopeIds, pathOf }: { items: Item[]; vi
     <div
       className={cx(
         'grid',
-        size === 's' && 'grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-7',
-        size === 'm' && 'grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 sm:gap-4',
-        size === 'l' && 'grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 sm:gap-5',
+        size === 's' && 'grid-cols-3 gap-x-2 gap-y-3 sm:grid-cols-5 lg:grid-cols-7',
+        size === 'm' && 'grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-4 sm:gap-x-4 sm:gap-y-6',
+        size === 'l' && 'grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 sm:gap-x-5',
       )}
     >
       {items.map((it) => (
@@ -141,7 +141,7 @@ function Card({ item, overlay }: { item: Item; overlay?: boolean }) {
       to={`/i/${item.id}`}
       onClick={(e) => overlay && e.preventDefault()}
       draggable={false}
-      className={cx('block overflow-hidden rounded-2xl bg-surface shadow-tile ring-1 ring-line/50 transition', overlay && 'rotate-2 shadow-lift')}
+      className={cx('block overflow-hidden rounded-2xl border border-line bg-surface transition', overlay && 'rotate-2 shadow-lift')}
     >
       {cover && <Thumb media={cover} className="h-28 w-full" />}
       <div className="p-3">

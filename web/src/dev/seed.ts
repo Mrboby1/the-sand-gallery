@@ -18,20 +18,17 @@ async function fakePhoto(seed: number, w = 960, h = 1200): Promise<File> {
   c.width = w; c.height = h
   const g = c.getContext('2d')!
   const [a, b, d] = palettes[seed % palettes.length]
-  const bg = g.createLinearGradient(0, 0, 0, h)
-  bg.addColorStop(0, '#f4ede2'); bg.addColorStop(0.62, '#e6d8c3'); bg.addColorStop(0.63, '#cdb89a'); bg.addColorStop(1, '#a88b66')
-  g.fillStyle = bg; g.fillRect(0, 0, w, h)
+  g.fillStyle = '#efe6d8'; g.fillRect(0, 0, w, h)
+  g.fillStyle = '#d8c6aa'; g.fillRect(0, h * 0.63, w, h)
   const cx = w / 2 + ((seed * 37) % 120) - 60
   const cy = h * 0.5
   const shapes = seed % 3
   // shadow
-  g.fillStyle = 'rgba(60,40,20,0.25)'
+  g.fillStyle = '#c4ae8d'
   g.beginPath(); g.ellipse(cx, h * 0.66, w * 0.24, 26, 0, 0, Math.PI * 2); g.fill()
   // body
-  const body = g.createRadialGradient(cx - 60, cy - 120, 20, cx, cy, w * 0.4)
-  body.addColorStop(0, a); body.addColorStop(0.55, b); body.addColorStop(1, d)
-  g.fillStyle = body
-  g.globalAlpha = 0.92
+  g.fillStyle = b
+  void a; void d
   g.beginPath()
   if (shapes === 0) { // cup
     g.moveTo(cx - 170, cy - 230); g.lineTo(cx + 170, cy - 230); g.quadraticCurveTo(cx + 160, cy + 120, cx + 90, cy + 160); g.lineTo(cx - 90, cy + 160); g.quadraticCurveTo(cx - 160, cy + 120, cx - 170, cy - 230)
@@ -41,17 +38,6 @@ async function fakePhoto(seed: number, w = 960, h = 1200): Promise<File> {
     g.moveTo(cx - 260, cy - 40); g.lineTo(cx + 260, cy - 40); g.bezierCurveTo(cx + 250, cy + 120, cx + 120, cy + 160, cx, cy + 165); g.bezierCurveTo(cx - 120, cy + 160, cx - 250, cy + 120, cx - 260, cy - 40)
   }
   g.closePath(); g.fill()
-  g.globalAlpha = 1
-  // highlights
-  g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 10; g.lineCap = 'round'
-  g.beginPath(); g.moveTo(cx - 110, cy - 180); g.quadraticCurveTo(cx - 130, cy - 20, cx - 80, cy + 90); g.stroke()
-  g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 5
-  g.beginPath(); g.moveTo(cx + 100, cy - 150); g.quadraticCurveTo(cx + 115, cy - 60, cx + 90, cy + 20); g.stroke()
-  // bokeh
-  for (let i = 0; i < 14; i++) {
-    g.fillStyle = `rgba(255,248,235,${0.08 + ((i * seed) % 7) / 60})`
-    g.beginPath(); g.arc((i * 211 + seed * 53) % w, ((i * 97 + seed * 31) % (h * 0.45)), 18 + ((i * 13) % 40), 0, Math.PI * 2); g.fill()
-  }
   const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), 'image/jpeg', 0.86))
   return new File([blob], `photo-${seed}.jpg`, { type: 'image/jpeg' })
 }

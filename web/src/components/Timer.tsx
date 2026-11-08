@@ -18,7 +18,7 @@ export function TimerCard({ itemId, hasChildren, onFullscreen }: { itemId: strin
   const own = totals.own(itemId)
   const childRunning = ticking && !runningHere ? byId.get(totals.runningItemId!) : null
   return (
-    <div className={cx('relative overflow-hidden rounded-3xl p-4 transition sm:p-5', ticking ? 'bg-accent-soft' : 'bg-surface ring-1 ring-line/70')}>
+    <div className={cx('relative overflow-hidden rounded-3xl p-4 transition sm:p-5', ticking ? 'bg-accent-soft' : 'border border-line bg-surface')}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <button onClick={onFullscreen} aria-label={t('timer.fullscreen')} className="shrink-0 transition active:scale-95">
           <Hourglass running={ticking} size={50} />
@@ -45,7 +45,7 @@ export function TimerCard({ itemId, hasChildren, onFullscreen }: { itemId: strin
           >
             {runningHere ? <><Pause size={18} fill="currentColor" /> {t('timer.pause')}</> : <><Play size={18} fill="currentColor" /> {own > 0 ? t('timer.resume') : t('timer.start')}</>}
           </Button>
-          <IconButton label={t('timer.fullscreen')} onClick={onFullscreen} className="h-12 w-12 bg-surface/60"><Maximize2 size={18} /></IconButton>
+          <IconButton label={t('timer.fullscreen')} onClick={onFullscreen} className="h-12 w-12 border border-line"><Maximize2 size={18} /></IconButton>
         </div>
       </div>
     </div>
@@ -80,7 +80,6 @@ export function FullscreenTimer({ itemId, onClose }: { itemId: string; onClose: 
 
   return createPortal(
     <div className="fade fixed inset-0 z-[60] flex flex-col items-center justify-center bg-bg px-6 safe-top safe-bottom">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--sg-accent-soft),transparent_65%)] opacity-80" />
       <IconButton label={t('timer.close')} onClick={onClose} className="absolute right-4 top-[calc(1rem+env(safe-area-inset-top))]"><X size={22} /></IconButton>
       <div className="relative flex flex-col items-center">
         <Hourglass running={ticking} size={size * 0.75} />

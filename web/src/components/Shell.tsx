@@ -45,7 +45,6 @@ export function WakeLayer() {
   if (health === 'waking') {
     return (
       <div className="fade fixed inset-0 z-[80] flex flex-col items-center justify-center bg-bg px-8 text-center">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--sg-accent-soft),transparent_60%)]" />
         <div className="relative flex flex-col items-center">
           <Hourglass running size={130} />
           <h2 className="mt-8 font-display text-2xl font-semibold">{t('wake.waking')}</h2>
