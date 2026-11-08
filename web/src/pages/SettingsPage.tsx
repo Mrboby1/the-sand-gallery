@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Check, Copy, DatabaseBackup, LogOut, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Bell, Check, Copy, DatabaseBackup, LogOut, Pencil, Plus, Trash2 } from 'lucide-react'
 import {
   useApp, addStatus, addTemplate, backend, deleteStatus, deleteTemplate, moveStatus, revokeShare, saveSettings, shareUrl,
   signOut, toast, updateStatus, updateTemplate,
@@ -12,7 +12,8 @@ import { TopBar } from '../components/Shell'
 import { Button, Field, IconButton, Input, Sheet, Switch, confirmDialog, cx } from '../components/ui'
 import { useMoney } from '../components/Tabs'
 import { onColor } from '../components/StatusPill'
-import { t } from '../i18n'
+import { t, tn } from '../i18n'
+import { clearTimer, disablePush, ensurePush, permission, requestNotifications } from '../lib/notify'
 
 const CURRENCIES = ['ILS', 'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF', 'JPY']
 const SWATCHES = ['#9b87c9', '#d9903d', '#8f9aa6', '#5f9e6e', '#c0564a', '#4f8fbf', '#c27ba0', '#b8a038', '#3f9c95', '#7a5634']
@@ -129,6 +130,8 @@ export function SettingsPage() {
           </div>
         </Section>
 
+        <NotificationsSection />
+
         <Section title={t('settings.templates')}>
           {!data.templates.length && <p className="mb-3 text-sm text-muted">{t('settings.noTemplates')}</p>}
           <div className="flex flex-col gap-1">
@@ -200,6 +203,66 @@ function BackupButton() {
     >
       <DatabaseBackup size={15} /> {busy ? t('common.loading') : t('settings.backupNow')}
     </Button>
+  )
+}
+
+function NotificationsSection() {
+  const s = useApp((st) => st.data.settings)
+  const [perm, setPerm] = useState(permission())
+  const [busy, setBusy] = useState(false)
+  const stateKey = `notif.state.${perm}` as const
+  return (
+    <Section title={t('notif.section')}>
+      <label className="flex items-center justify-between gap-4">
+        <span>
+          <span className="block font-medium">{t('notif.timer')}</span>
+          <span className="block text-[13px] text-muted">{t('notif.timerHint')}</span>
+        </span>
+        <Switch
+          checked={s.notify_enabled}
+          label={t('notif.timer')}
+          onChange={async (v) => {
+            void saveSettings({ notify_enabled: v })
+            if (v) setPerm(await requestNotifications())
+            else { await clearTimer(); await disablePush() }
+          }}
+        />
+      </label>
+      <div className="mt-4 flex items-center justify-between gap-4">
+        <span className="font-medium">{t('notif.reminder')}</span>
+        <Segmented
+          value={String(s.reminder_hours)}
+          options={[{ v: '0', l: t('notif.off') }, { v: '1', l: '1h' }, { v: '2', l: '2h' }, { v: '4', l: '4h' }]}
+          onChange={(v) => saveSettings({ reminder_hours: Number(v) })}
+        />
+      </div>
+      <p className="mt-4 text-[13px] text-muted">{t(stateKey)}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {perm === 'default' && s.notify_enabled && (
+          <Button size="sm" variant="primary" onClick={async () => setPerm(await requestNotifications())}>{t('notif.allowHere')}</Button>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy || perm !== 'granted'}
+          onClick={async () => {
+            setBusy(true)
+            try {
+              await ensurePush()
+              const n = backend.mode === 'cloud' ? await backend.pushTest().catch(() => 0) : 0
+              if (n > 0) toast(tn('notif.testSent', n))
+              else {
+                const reg = await navigator.serviceWorker.ready
+                await reg.showNotification('The Sand Gallery', { body: 'Notifications work on this device.', tag: 'test', icon: '/icon-192.png' })
+                toast(t('notif.testLocal'))
+              }
+            } finally { setBusy(false) }
+          }}
+        >
+          <Bell size={15} /> {t('notif.test')}
+        </Button>
+      </div>
+    </Section>
   )
 }
 

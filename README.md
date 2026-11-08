@@ -60,6 +60,22 @@ all day, and the service worker caches thumbnails by path.
 | `POST /api/wake` | restores a paused Supabase project. Needs a Supabase JWT, verified locally against the embedded JWKS (works while the DB sleeps; tokens up to 30 days past expiry accepted); 1 call/min per user, and 1 per 30 min total without a token (KV `RATE`) |
 | `POST /api/backup` | run the backup now [auth, 1 per 5 min] (Settings > Account > Back up now) |
 | cron `0 3 * * *` | keep-alive query + JSON export of all tables to B2; if the DB is asleep it requests a restore |
+| `GET /api/push/key`, `POST /api/push/subscribe`, `/unsubscribe`, `/test` | Web Push device registration and a test push [auth] |
+| `POST /api/timer/stop` | the notification's Stop button: `{deviceId, deviceSecret}`, no sign-in token needed |
+| `POST /api/hooks/session` | called by the database (pg_net) on every timer start/stop, with `X-Hook-Secret` |
+| cron `*/15 * * * *` | "Still working on X?" reminder every N hours (Settings > Notifications) while a timer runs |
+
+### Timer notifications (Web Push)
+- While a timer runs, devices that allowed notifications show "⏳ <title>, running since 14:02" (tag `timer`, stays
+  until stopped) with **Stop** / **Open**. The page shows and clears it at once (`src/components/TimerNotifier.tsx`).
+- Other devices and closed apps: the trigger `private.notify_session_change` (pg_net) calls `/api/hooks/session` on
+  every start/stop, and the Worker pushes to all of the user's `push_subscriptions` (`worker/src/webpush.ts`: VAPID
+  JWT + RFC 8291 aes128gcm with WebCrypto). Push topic `timer`, so an offline phone only gets the latest state.
+- Stop in the notification (`src/sw.ts`): an open app stops it through its offline queue; otherwise the service
+  worker calls `/api/timer/stop` with this device's secret; offline, it is stored and applied (with the time it was
+  pressed) the next time the app opens.
+- Secrets: `VAPID_PRIVATE_JWK`, `HOOK_SECRET` (Worker secrets + DPAPI `vapid-private.key`, `hook-secret.key`; the hook
+  secret is also in `private.hook_config`). Re-create with `scripts/setup-push.ps1` (devices then re-allow once).
 
 Share-page media URLs are signed per hour (valid up to 2 h), so revoking a link takes effect within about 2 hours.
 Uploads retry with backoff; a failed thumbnail keeps the photo (shown from the original), a failed original

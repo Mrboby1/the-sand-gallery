@@ -56,6 +56,12 @@ export interface Backend {
   // public share pages
   fetchShared(token: string): Promise<SharedGallery | null>
 
+  /** Web Push: register this device; returns the per-device secret used by the notification's Stop button. */
+  pushSubscribe(sub: PushSubscriptionJSON): Promise<{ deviceId: string; deviceSecret: string }>
+  pushUnsubscribe(endpoint: string): Promise<void>
+  /** Sends a test notification to all of this user's devices; returns how many accepted it. */
+  pushTest(): Promise<number>
+
   /** Runs the nightly JSON backup right now. */
   backupNow(): Promise<{ ok: boolean; key?: string; counts?: Record<string, number>; reason?: string }>
 

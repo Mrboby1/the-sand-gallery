@@ -233,6 +233,10 @@ export class LocalBackend implements Backend {
     }
   }
 
+  async pushSubscribe(): Promise<{ deviceId: string; deviceSecret: string }> { throw new Error('push needs the cloud') }
+  async pushUnsubscribe() {}
+  async pushTest() { return 0 }
+
   async backupNow() {
     return { ok: true, key: '(local mode: data lives in this browser)' }
   }

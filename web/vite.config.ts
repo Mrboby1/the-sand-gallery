@@ -27,30 +27,12 @@ export default defineConfig({
           { src: '/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: {
-        navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//],
+      // own service worker (src/sw.ts): offline shell + thumbnail cache + timer notifications / Web Push
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png}', '**/*-latin-*.woff2'],
-        runtimeCaching: [
-          {
-            // B2 thumbnails/photos: presigned URLs change their query string, so cache by path only.
-            urlPattern: ({ url }) => url.hostname.endsWith('backblazeb2.com') && /\/thumbs\//.test(url.pathname),
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'sg-thumbs',
-              expiration: { maxEntries: 800, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              cacheableResponse: { statuses: [0, 200] },
-              plugins: [
-                {
-                  cacheKeyWillBeUsed: async ({ request }) => {
-                    const u = new URL(request.url)
-                    return u.origin + u.pathname
-                  },
-                },
-              ],
-            },
-          },
-        ],
       },
     }),
   ],

@@ -7,7 +7,8 @@ account_id = "92c0925f1726a45f64556448560d3cd0"
 
 [triggers]
 # daily at 03:00 UTC: keep-alive + JSON backup to B2 sand-gallery/backups/
-crons = ["0 3 * * *"]
+# 03:00 UTC: keep-alive + backup. Every 15 min: "still working?" reminders for running timers.
+crons = ["0 3 * * *", "*/15 * * * *"]
 
 # Rate limits (wake-up). KV is used because the Cache API is not available on workers.dev.
 [[kv_namespaces]]
@@ -24,6 +25,8 @@ SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 # Public JWT verification keys (from /auth/v1/.well-known/jwks.json). Embedded so tokens can be checked
 # while the project is asleep. If Supabase rotates keys the Worker also fetches the live set when it can.
 SUPABASE_JWKS = '{"keys":[{"alg":"ES256","crv":"P-256","ext":true,"key_ops":["verify"],"kid":"523473c9-6f8d-4f4a-bddb-243653589570","kty":"EC","use":"sig","x":"c4A1Gt5REQiymeJUeVoFhuEPOn47ulNd4wH6Dfmfy3E","y":"nn7K-QeSHnsqiloF_gesbf00G-6IW24ob1as7K6YaWU"}]}'
+# Web Push: public VAPID key (the private one is the secret VAPID_PRIVATE_JWK)
+VAPID_PUBLIC = "BBM3NDqCRgFz3tdmkXkKa09CNf-r8STs3H4C2tvkMMc4Neaj4wl_KaeUf4tABswwhw4VV_HZgkbltgbLdqjqKo0"
 ALLOWED_ORIGINS = "https://thesandgallery.pages.dev,https://*.thesandgallery.pages.dev,http://localhost:5173,http://localhost:4173"
 # Backblaze B2 (from infra/CLOUD.md). SHARED account: only this bucket, only keys under sand-gallery/.
 B2_ENDPOINT = "s3.eu-central-003.backblazeb2.com"
@@ -32,4 +35,4 @@ B2_BUCKET = "sand-gallery-ypghnj"
 B2_KEY_ID = "003dd812a24792f0000000003"
 
 # Secrets (set with `wrangler secret put`, piped from infra/get-secret.ps1, never stored here):
-#   SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ACCESS_TOKEN, B2_APPLICATION_KEY
+#   SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ACCESS_TOKEN, B2_APPLICATION_KEY, VAPID_PRIVATE_JWK, HOOK_SECRET

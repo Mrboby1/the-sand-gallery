@@ -10,11 +10,19 @@
  *                           (verified locally against the JWKS, so it works while the DB sleeps) and is
  *                           rate-limited; without a token only one call per 30 minutes is allowed.
  *  POST /api/backup         run the backup now (signed-in user; Settings > Back up now)
+ *  GET  /api/push/key       public VAPID key
+ *  POST /api/push/subscribe  register this device for Web Push [auth] -> { deviceId, deviceSecret }
+ *  POST /api/push/unsubscribe                                     [auth]
+ *  POST /api/push/test       test notification to all of the user's devices [auth]
+ *  POST /api/timer/stop      "Stop" from a notification: { deviceId, deviceSecret } (no sign-in token needed)
+ *  POST /api/hooks/session   called by the database (pg_net) when a timer starts/stops -> push to devices
  *  cron (daily)             keep-alive + JSON backup of all tables to B2
+ *  cron (every 15 min)      "still working on X?" reminders for long-running timers
  *
  * Backblaze is a SHARED account: every key this Worker signs or writes starts with `sand-gallery/`.
  */
 import { AwsClient } from 'aws4fetch'
+import { b64urlEncode, sendPush, type PushSubscriptionRow, type VapidKeys } from './webpush'
 
 export interface Env {
   SUPABASE_URL: string
@@ -30,6 +38,9 @@ export interface Env {
   ALLOWED_ORIGINS: string // comma separated; "*.x.pages.dev" wildcards allowed
   SUPABASE_JWKS: string // public keys, JSON
   RATE: KVNamespace
+  VAPID_PUBLIC: string
+  VAPID_PRIVATE_JWK: string // secret
+  HOOK_SECRET: string // secret, shared with the database hook
 }
 
 export const PREFIX = 'sand-gallery/'
@@ -329,6 +340,126 @@ async function wake(env: Env) {
   return { ok: true, status: 'RESTORING' }
 }
 
+// ------------------------------------------------------------------ notifications (Web Push)
+const PUSH_SUBJECT = 'https://thesandgallery.pages.dev'
+const vapid = (env: Env): VapidKeys => ({ publicKey: env.VAPID_PUBLIC, privateJwk: JSON.parse(env.VAPID_PRIVATE_JWK) as JsonWebKey })
+
+async function sha256(s: string): Promise<string> {
+  return b64urlEncode(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))
+}
+function sameString(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let x = 0
+  for (let i = 0; i < a.length; i++) x |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return x === 0
+}
+
+async function userSettings(env: Env, ownerId: string): Promise<{ notify_enabled: boolean; reminder_hours: number }> {
+  const res = await service(env, `settings?owner_id=eq.${ownerId}&select=notify_enabled,reminder_hours`)
+  const rows = res.ok ? ((await res.json()) as { notify_enabled: boolean; reminder_hours: number }[]) : []
+  return rows[0] ?? { notify_enabled: true, reminder_hours: 2 }
+}
+
+/** Pushes to every device of a user; drops subscriptions the push service says are gone. */
+async function pushToUser(env: Env, ownerId: string, data: unknown, opts: { topic?: string; ttl?: number } = {}): Promise<number> {
+  const res = await service(env, `push_subscriptions?owner_id=eq.${ownerId}&select=id,endpoint,p256dh,auth`)
+  if (!res.ok) return 0
+  const subs = (await res.json()) as PushSubscriptionRow[]
+  let ok = 0
+  await Promise.all(subs.map(async (s) => {
+    try {
+      const st = await sendPush(s, data, vapid(env), PUSH_SUBJECT, opts)
+      if (st === 404 || st === 410) await service(env, `push_subscriptions?id=eq.${s.id}`, { method: 'DELETE' })
+      else if (st < 300) { ok++; await service(env, `push_subscriptions?id=eq.${s.id}`, { method: 'PATCH', body: JSON.stringify({ last_ok_at: new Date().toISOString() }) }) }
+      else console.log('push failed', st)
+    } catch (e) { console.log('push error', String(e)) }
+  }))
+  return ok
+}
+
+async function pushSubscribe(env: Env, req: Request) {
+  const user = await requireUser(env, req)
+  const b = (await req.json()) as { endpoint?: string; keys?: { p256dh?: string; auth?: string }; userAgent?: string }
+  if (!b.endpoint || !/^https:\/\//.test(b.endpoint) || b.endpoint.length > 1000 || !b.keys?.p256dh || !b.keys?.auth) throw new HttpError(400, 'bad subscription')
+  const secret = b64urlEncode(crypto.getRandomValues(new Uint8Array(32)))
+  const res = await service(env, 'push_subscriptions?on_conflict=endpoint', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify({ owner_id: user.id, endpoint: b.endpoint, p256dh: b.keys.p256dh, auth: b.keys.auth, device_secret_hash: await sha256(secret), user_agent: (b.userAgent ?? '').slice(0, 200) }),
+  })
+  if (!res.ok) throw new HttpError(502, `db ${res.status}`)
+  const [row] = (await res.json()) as { id: string }[]
+  return { deviceId: row.id, deviceSecret: secret }
+}
+
+async function pushUnsubscribe(env: Env, req: Request) {
+  const user = await requireUser(env, req)
+  const { endpoint } = (await req.json()) as { endpoint?: string }
+  if (!endpoint) throw new HttpError(400, 'bad endpoint')
+  await service(env, `push_subscriptions?owner_id=eq.${user.id}&endpoint=eq.${encodeURIComponent(endpoint)}`, { method: 'DELETE' })
+  return { ok: true }
+}
+
+async function pushTest(env: Env, req: Request) {
+  const user = await requireUser(env, req)
+  if (!(await allow(env, `pushtest:${user.id}`, 60))) throw new HttpError(429, 'one test per minute')
+  const sent = await pushToUser(env, user.id, { type: 'test' }, { ttl: 600 })
+  return { sent }
+}
+
+/** The notification's Stop button: authenticated by the device's own secret, works with the app closed. */
+async function timerStopFromDevice(env: Env, req: Request) {
+  const { deviceId, deviceSecret } = (await req.json()) as { deviceId?: string; deviceSecret?: string }
+  if (!deviceId || !UUID.test(deviceId) || !deviceSecret) throw new HttpError(400, 'bad device')
+  const res = await service(env, `push_subscriptions?id=eq.${deviceId}&select=owner_id,device_secret_hash`)
+  const [dev] = res.ok ? ((await res.json()) as { owner_id: string; device_secret_hash: string }[]) : []
+  if (!dev || !sameString(dev.device_secret_hash, await sha256(deviceSecret))) throw new HttpError(401, 'unknown device')
+  if (!(await allow(env, `stop:${deviceId}`, 60))) return { ok: true, note: 'already stopping' }
+  // closing the open session fires the database hook, which clears the notification on every device
+  const up = await service(env, `sessions?owner_id=eq.${dev.owner_id}&ended_at=is.null`, { method: 'PATCH', body: JSON.stringify({ ended_at: new Date().toISOString() }) })
+  if (!up.ok) throw new HttpError(502, `db ${up.status}`)
+  return { ok: true }
+}
+
+interface HookBody { event: 'start' | 'stop'; owner_id: string; session_id: string; item_id: string; title: string; started_at: string }
+
+/** Database hook (pg_net): a timer started or stopped somewhere -> show/clear the notification everywhere. */
+async function sessionHook(env: Env, req: Request) {
+  const secret = req.headers.get('X-Hook-Secret') ?? ''
+  if (!env.HOOK_SECRET || !sameString(secret, env.HOOK_SECRET)) throw new HttpError(401, 'bad hook secret')
+  const b = (await req.json()) as HookBody
+  if (!b.owner_id || !UUID.test(b.owner_id)) throw new HttpError(400, 'bad body')
+  const s = await userSettings(env, b.owner_id)
+  if (b.event === 'start' && !s.notify_enabled) return { sent: 0 }
+  const data = b.event === 'start'
+    ? { type: 'timer-start', session_id: b.session_id, item_id: b.item_id, title: b.title, started_at: b.started_at }
+    : { type: 'timer-stop', session_id: b.session_id }
+  // same topic: a phone that was offline only gets the latest start/stop
+  return { sent: await pushToUser(env, b.owner_id, data, { topic: 'timer' }) }
+}
+
+/** Every 15 min: "Still working on X?" once per reminder interval while a timer stays open. */
+export async function reminders(env: Env) {
+  const res = await service(env, 'sessions?ended_at=is.null&select=id,owner_id,item_id,started_at,reminded_at')
+  if (!res.ok) return { ok: false }
+  const open = (await res.json()) as { id: string; owner_id: string; item_id: string; started_at: string; reminded_at: string | null }[]
+  const now = Date.now()
+  let sent = 0
+  for (const s of open) {
+    const st = await userSettings(env, s.owner_id)
+    if (!st.notify_enabled || !st.reminder_hours) continue
+    const every = st.reminder_hours * 3600_000
+    const started = Date.parse(s.started_at)
+    const last = s.reminded_at ? Date.parse(s.reminded_at) : started
+    if (now - started < every || now - last < every - 60_000) continue
+    const it = await service(env, `items?id=eq.${s.item_id}&select=title`)
+    const [item] = it.ok ? ((await it.json()) as { title: string }[]) : []
+    sent += await pushToUser(env, s.owner_id, { type: 'timer-reminder', session_id: s.id, item_id: s.item_id, title: item?.title ?? '', started_at: s.started_at }, { topic: 'timer' })
+    await service(env, `sessions?id=eq.${s.id}`, { method: 'PATCH', body: JSON.stringify({ reminded_at: new Date(now).toISOString() }) })
+  }
+  return { ok: true, open: open.length, sent }
+}
+
 // ------------------------------------------------------------------ cron: keep-alive + backup
 export async function backup(env: Env) {
   if (!(await dbAnswers(env))) {
@@ -377,6 +508,12 @@ export default {
         if (!(await allow(env, `backup:${u.id}`, 300))) throw new HttpError(429, 'a backup was made a few minutes ago')
         return json(await backup(env), 200, h)
       }
+      if (req.method === 'GET' && path === '/api/push/key') return json({ publicKey: env.VAPID_PUBLIC }, 200, h)
+      if (req.method === 'POST' && path === '/api/push/subscribe') return json(await pushSubscribe(env, req), 200, h)
+      if (req.method === 'POST' && path === '/api/push/unsubscribe') return json(await pushUnsubscribe(env, req), 200, h)
+      if (req.method === 'POST' && path === '/api/push/test') return json(await pushTest(env, req), 200, h)
+      if (req.method === 'POST' && path === '/api/timer/stop') return json(await timerStopFromDevice(env, req), 200, h)
+      if (req.method === 'POST' && path === '/api/hooks/session') return json(await sessionHook(env, req), 200, h)
       if (path === '/' || path === '/api') return json({ name: 'sand-gallery-api', ok: true }, 200, h)
       return json({ error: 'not found' }, 404, h)
     } catch (e) {
@@ -385,7 +522,11 @@ export default {
     }
   },
 
-  async scheduled(_ctrl: ScheduledController, env: Env, ctx: ExecutionContext) {
+  async scheduled(ctrl: ScheduledController, env: Env, ctx: ExecutionContext) {
+    if (ctrl.cron !== '0 3 * * *') {
+      ctx.waitUntil(reminders(env).then((r) => console.log('reminders', JSON.stringify(r))).catch((e) => console.error('reminders failed', String(e))))
+      return
+    }
     ctx.waitUntil(backup(env).then((r) => console.log('backup', JSON.stringify(r))).catch((e) => console.error('backup failed', String(e))))
   },
 } satisfies ExportedHandler<Env>

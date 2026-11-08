@@ -482,7 +482,12 @@ export async function duplicateItem(id: string): Promise<string | null> {
 }
 
 // ---------------------------------------------------------------- timer
+let onTimerStart: (() => void) | null = null
+/** Lets the notification module ask for permission the first time a timer is started (inside the tap). */
+export function setTimerStartHook(fn: () => void) { onTimerStart = fn }
+
 export function startTimer(itemId: string) {
+  onTimerStart?.()
   const sid = uuid()
   const ts = now()
   return commit(
@@ -494,8 +499,9 @@ export function startTimer(itemId: string) {
   )
 }
 
-export function stopTimer() {
-  const ts = now()
+/** Stops the running timer (at `at` when it was pressed earlier, e.g. in the notification). */
+export function stopTimer(at?: string) {
+  const ts = at ?? now()
   return commit(
     (s) => ({ ...s, sessions: s.sessions.map((x) => (x.ended_at ? x : { ...x, ended_at: ts })) }),
     [{ k: 'stop', at: ts }],

@@ -104,6 +104,10 @@ export interface Settings {
   markup_pct: number
   week_starts_on: number // 0 = Sunday, 1 = Monday
   due_dates_enabled: boolean
+  /** Timer notification + reminders (all devices). */
+  notify_enabled: boolean
+  /** "Still working?" reminder every N hours while a timer runs; 0 = off. */
+  reminder_hours: number
   updated_at?: ISODate
 }
 
@@ -151,6 +155,8 @@ export const DEFAULT_SETTINGS: Settings = {
   markup_pct: 0,
   week_starts_on: 0,
   due_dates_enabled: false,
+  notify_enabled: true,
+  reminder_hours: 2,
 }
 
 export const DEFAULT_STATUSES: Pick<Status, 'name' | 'color' | 'is_finished'>[] = [
