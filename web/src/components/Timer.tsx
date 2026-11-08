@@ -6,6 +6,7 @@ import { useApp, startTimer, stopTimer } from '../store/app'
 import { useItemsMap, useRunning, useTotals } from '../lib/hooks'
 import { fmtClock, fmtDuration } from '../lib/time'
 import { Hourglass } from './Hourglass'
+import { GrainCount } from './GrainCount'
 import { Button, IconButton, cx } from './ui'
 import { t } from '../i18n'
 
@@ -85,6 +86,7 @@ export function FullscreenTimer({ itemId, onClose }: { itemId: string; onClose: 
       <div className="relative flex flex-col items-center">
         <Hourglass running={ticking} size={size * 0.75} />
         <div className={cx('mt-6 font-display text-6xl font-semibold tabular sm:text-7xl', ticking && 'text-accent-strong')}>{fmtClock(totals.total(itemId))}</div>
+        <GrainCount totalMs={totals.total(itemId)} asOf={totals.now} running={ticking} />
         <div className="mt-3 max-w-[80vw] truncate text-center text-lg text-muted">{item?.title}</div>
         <Button
           variant={runningHere ? 'outline' : 'primary'}

@@ -84,6 +84,8 @@ export const en = {
   'timer.withSub': 'incl. subtasks',
   'timer.fullscreen': 'Fullscreen',
   'timer.close': 'Close',
+  'timer.whichAre': 'which are',
+  'timer.grains': 'grains of sand',
   'timer.childRunning': 'Ticking: "{title}" is running',
 
   'gallery.items': 'Subtasks',
