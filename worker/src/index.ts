@@ -7,6 +7,7 @@
  *  GET  /api/share/:token   public read-only gallery for a share link (presigned media)
  *  GET  /api/health         { state: 'up' | 'asleep' | 'waking' | 'unreachable' }
  *  POST /api/wake           restores a paused Supabase project (Management API)
+ *  POST /api/backup         run the backup now (signed-in user; Settings > Back up now)
  *  cron (daily)             keep-alive + JSON backup of all tables to B2
  *
  * Backblaze is a SHARED account: every key this Worker signs or writes starts with `sand-gallery/`.
@@ -295,6 +296,7 @@ export default {
       }
       if (req.method === 'GET' && path === '/api/health') return json(await health(env), 200, h)
       if (req.method === 'POST' && path === '/api/wake') return json(await wake(env), 200, h)
+      if (req.method === 'POST' && path === '/api/backup') { await requireUser(env, req); return json(await backup(env), 200, h) }
       if (path === '/' || path === '/api') return json({ name: 'sand-gallery-api', ok: true }, 200, h)
       return json({ error: 'not found' }, 404, h)
     } catch (e) {

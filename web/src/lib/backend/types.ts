@@ -53,6 +53,9 @@ export interface Backend {
   // public share pages
   fetchShared(token: string): Promise<SharedGallery | null>
 
+  /** Runs the nightly JSON backup right now. */
+  backupNow(): Promise<{ ok: boolean; key?: string; counts?: Record<string, number>; reason?: string }>
+
   // database wake-up
   health(): Promise<HealthState>
   wake(): Promise<void>

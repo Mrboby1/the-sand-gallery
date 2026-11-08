@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Check, Copy, LogOut, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Copy, DatabaseBackup, LogOut, Pencil, Plus, Trash2 } from 'lucide-react'
 import {
   useApp, addStatus, addTemplate, backend, deleteStatus, deleteTemplate, moveStatus, revokeShare, saveSettings, shareUrl,
   signOut, toast, updateStatus, updateTemplate,
@@ -156,12 +156,39 @@ export function SettingsPage() {
             </div>
             <Button size="sm" variant="outline" onClick={() => signOut()}><LogOut size={15} /> {t('settings.signOut')}</Button>
           </div>
-          <p className="mt-4 text-[13px] text-muted">{backend.mode === 'local' ? t('settings.mode.local') : t('settings.backups')}</p>
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <p className="text-[13px] text-muted">{backend.mode === 'local' ? t('settings.mode.local') : t('settings.backups')}</p>
+            {backend.mode === 'cloud' && <BackupButton />}
+          </div>
         </Section>
         <p className="py-4 text-center text-xs text-muted">{t('app.name')} · v{__APP_VERSION__}</p>
       </main>
       {editTpl && <TemplateSheet tpl={editTpl === 'new' ? null : editTpl} onClose={() => setEditTpl(null)} />}
     </div>
+  )
+}
+
+function BackupButton() {
+  const [busy, setBusy] = useState(false)
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true)
+        try {
+          const r = await backend.backupNow()
+          toast(r.ok ? t('settings.backupDone') : t('common.error', { error: r.reason ?? '?' }), r.ok ? 'info' : 'error')
+        } catch (e) {
+          toast(t('common.error', { error: String((e as Error).message ?? e) }), 'error')
+        } finally {
+          setBusy(false)
+        }
+      }}
+    >
+      <DatabaseBackup size={15} /> {busy ? t('common.loading') : t('settings.backupNow')}
+    </Button>
   )
 }
 

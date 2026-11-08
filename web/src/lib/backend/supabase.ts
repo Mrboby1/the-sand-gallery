@@ -192,6 +192,10 @@ export class SupabaseBackend implements Backend {
     return (await res.json()) as SharedGallery
   }
 
+  async backupNow() {
+    return this.api<{ ok: boolean; key?: string; counts?: Record<string, number>; reason?: string }>('/api/backup', { method: 'POST' })
+  }
+
   // ---------- wake-up ----------
   async health(): Promise<HealthState> {
     try {

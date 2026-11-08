@@ -229,6 +229,10 @@ export class LocalBackend implements Backend {
     }
   }
 
+  async backupNow() {
+    return { ok: true, key: '(local mode: data lives in this browser)' }
+  }
+
   private wakeAt = 0
   async health(): Promise<HealthState> {
     if (localStorage.getItem('sg.local.asleep') !== '1') return 'up'

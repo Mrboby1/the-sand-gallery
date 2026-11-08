@@ -172,6 +172,8 @@ export const en = {
   'settings.account': 'Account',
   'settings.signOut': 'Sign out',
   'settings.backups': 'Backed up every night to your private storage.',
+  'settings.backupNow': 'Back up now',
+  'settings.backupDone': 'Backup saved',
   'settings.mode.local': 'Local demo mode: data lives in this browser only.',
 
   'share.title': 'Share link',
