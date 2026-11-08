@@ -61,7 +61,7 @@ export function timerNotification(n: TimerNote, opts: { silent: boolean; reminde
       silent: opts.silent && !opts.reminder,
       timestamp: Date.parse(n.startedAt),
       icon: '/icon-192.png',
-      badge: '/icon-192.png',
+      badge: '/badge-96.png', // white hourglass on transparent: Android's small status-bar icon
       data: { kind: 'timer', ...n },
       actions: [{ action: 'stop', title: 'Stop' }, { action: 'open', title: 'Open' }],
     },

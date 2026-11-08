@@ -5,7 +5,7 @@ import type { Item, Media } from '../lib/types'
 import { useApp, childrenOf } from '../store/app'
 import { useCoverFor, useMediaUrl, useTotals } from '../lib/hooks'
 import { fmtDuration } from '../lib/time'
-import { Lightbox, NoteBadge } from './MediaGrid'
+import { Lightbox, NoteBubble } from './MediaGrid'
 import { CostsTab, NotesTab, TimeLogTab } from './Tabs'
 import { setClientView, useClientView } from '../lib/clientView'
 import { Eye, X } from 'lucide-react'
@@ -44,15 +44,17 @@ export function AlbumTile({ item, cover, count, size = 'm' }: { item: Item; cove
   )
 }
 
-function MasonryTile({ m, onOpen, alt }: { m: Media; onOpen: () => void; alt: string }) {
+function MasonryTile({ m, onOpen, onOpenNote, alt }: { m: Media; onOpen: () => void; onOpenNote: () => void; alt: string }) {
   const url = useMediaUrl(m.thumb_key ?? (m.kind === 'photo' ? m.object_key : null))
   const ratio = m.width && m.height ? `${m.width} / ${m.height}` : '1 / 1'
   return (
-    <button onClick={onOpen} aria-label={alt} className="group relative mb-2 block w-full overflow-hidden rounded-xl bg-surface-2 sm:mb-3" style={{ aspectRatio: ratio }}>
+    <div className="mb-2 break-inside-avoid sm:mb-3">
+    <button onClick={onOpen} aria-label={alt} className="group relative block w-full overflow-hidden rounded-xl bg-surface-2" style={{ aspectRatio: ratio }}>
       {url && <img src={url} alt={alt} loading="lazy" decoding="async" className="fade absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:opacity-90" />}
       {m.kind === 'video' && <span className="absolute inset-0 m-auto flex h-11 w-11 items-center justify-center rounded-full bg-[#2a2017]/60 text-white"><Play size={18} fill="white" /></span>}
-      {m.note && <NoteBadge />}
     </button>
+    {m.note && <div className="flex"><NoteBubble note={m.note} onOpen={onOpenNote} /></div>}
+    </div>
   )
 }
 
@@ -63,6 +65,7 @@ export function FinishedView({ item }: { item: Item }) {
   const totals = useTotals()
   const covers = useCoverFor()
   const [open, setOpen] = useState<number | null>(null)
+  const [noteOpen, setNoteOpen] = useState(false)
   const [tab, setTab] = useState<'gallery' | 'notes' | 'log' | 'costs'>('gallery')
   const client = useClientView()
   const tabs = (['gallery', 'notes', 'log', 'costs'] as const).filter((x) => !(client && x === 'costs'))
@@ -117,14 +120,14 @@ export function FinishedView({ item }: { item: Item }) {
 
       {media.length > 0 ? (
         <div className="columns-2 gap-2 sm:columns-3 sm:gap-3 lg:columns-4">
-          {media.map((m, i) => <MasonryTile key={m.id} m={m} alt={`${item.title} ${i + 1}`} onOpen={() => setOpen(i)} />)}
+          {media.map((m, i) => <MasonryTile key={m.id} m={m} alt={`${item.title} ${i + 1}`} onOpen={() => { setNoteOpen(false); setOpen(i) }} onOpenNote={() => { setNoteOpen(true); setOpen(i) }} />)}
         </div>
       ) : !kids.length && (
         <p className="py-12 text-center text-muted">{t('gallery.empty')}</p>
       )}
 
       </>}
-      {open !== null && media[open] && <Lightbox list={media} index={open} item={item} onIndex={setOpen} onClose={() => setOpen(null)} readOnly />}
+      {open !== null && media[open] && <Lightbox list={media} index={open} item={item} onIndex={(i) => { setNoteOpen(false); setOpen(i) }} onClose={() => setOpen(null)} readOnly noteOpen={noteOpen} />}
     </div>
   )
 }

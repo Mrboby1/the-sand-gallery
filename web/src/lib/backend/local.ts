@@ -17,6 +17,7 @@ function emptyDB(): DB {
   const now = new Date().toISOString()
   return {
     items: [],
+    notes: [],
     statuses: DEFAULT_STATUSES.map((s, i) => ({ id: crypto.randomUUID(), name: s.name, color: s.color, is_finished: s.is_finished, sort_order: i, created_at: now })),
     sessions: [],
     media: [],
@@ -30,7 +31,15 @@ function emptyDB(): DB {
 function read(): DB {
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) return JSON.parse(raw) as DB
+    if (raw) {
+      const db = JSON.parse(raw) as DB
+      if (!db.notes) {
+        // same migration as the cloud: the old single note of each item becomes its first note
+        db.notes = db.items.filter((i) => i.notes.trim()).map((i) => ({ id: crypto.randomUUID(), item_id: i.id, body: i.notes, pinned: false, created_at: i.created_at, updated_at: i.updated_at }))
+        write(db)
+      }
+      return db
+    }
   } catch { /* ignore */ }
   const db = emptyDB()
   write(db)
@@ -137,6 +146,7 @@ export class LocalBackend implements Backend {
       db.media = db.media.filter((m) => !set.has(m.item_id))
       db.cost_lines = db.cost_lines.filter((c) => !set.has(c.item_id))
       db.share_links = db.share_links.filter((l) => !set.has(l.item_id))
+      db.notes = db.notes.filter((n) => !set.has(n.item_id))
     }
     if (table === 'media') for (const it of db.items) if (it.cover_media_id && set.has(it.cover_media_id)) it.cover_media_id = null
     if (table === 'statuses') for (const it of db.items) if (it.status_id && set.has(it.status_id)) it.status_id = null

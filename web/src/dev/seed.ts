@@ -72,6 +72,7 @@ export async function seedDemo() {
   const ruby = mk('Ruby goblets', null, 'In progress', ['goblet', 'red'])
   const lilac = mk('Lilac pendant', null, 'Done', ['jewelry'])
   await backend.insert('items', items)
+  await backend.insert('notes', items.filter((i) => i.notes).map((i) => ({ id: crypto.randomUUID(), item_id: i.id, body: i.notes, pinned: false, created_at: i.created_at, updated_at: i.updated_at })))
 
   const sessions: Session[] = []
   const sess = (it: Item, daysAgo: number, startH: number, hours: number) => {

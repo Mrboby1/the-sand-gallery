@@ -49,3 +49,18 @@ out('apple-touch-icon.png', icon(180, { rounded: false, pad: 0.15 }), 180)
 writeFileSync(new URL('../public/favicon.svg', import.meta.url), icon(64, { rounded: true, pad: 0.1 }))
 writeFileSync(new URL('../public/logo.svg', import.meta.url), icon(512, { rounded: true, pad: 0.14 }))
 console.log('icons written')
+
+// Android status-bar badge: a white hourglass silhouette on a TRANSPARENT background (Android masks it to one
+// colour, so any opaque background would show as a filled square). Bold shapes so it still reads at 24dp.
+const badge = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <g fill="#fff">
+    <rect x="16" y="8" width="64" height="9" rx="4.5"/>
+    <rect x="16" y="79" width="64" height="9" rx="4.5"/>
+    <path d="M30 31 L66 31 L48 50 Z"/>
+    <circle cx="48" cy="60" r="3.2"/>
+    <circle cx="48" cy="70" r="3.2"/>
+  </g>
+  <path d="M24 17 C24 38 44 42 44 48 C44 54 24 58 24 79 M72 17 C72 38 52 42 52 48 C52 54 72 58 72 79" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+</svg>`
+writeFileSync(new URL('../public/badge-96.png', import.meta.url), new Resvg(badge, { fitTo: { mode: 'width', value: 96 }, background: 'rgba(0,0,0,0)' }).render().asPng())
+console.log('badge written')

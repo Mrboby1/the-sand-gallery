@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
-import type { Item, Session } from '../lib/types'
+import { Pencil, Pin, PinOff, Plus, Trash2 } from 'lucide-react'
+import type { Item, Note, Session } from '../lib/types'
 import {
-  useApp, addCost, addSession, deleteCost, deleteSession, descendantIds, updateCost, updateItem, updateSession,
+  useApp, addCost, addNote, addSession, deleteCost, deleteNote, deleteSession, descendantIds, updateCost, updateNote, updateSession,
 } from '../store/app'
 import { useNow, useRunning, useWeekTotal } from '../lib/hooks'
 import { fmtDuration, MS_HOUR, sessionMs, toLocalInput } from '../lib/time'
@@ -12,43 +12,105 @@ import { HourglassGlyph } from './Hourglass'
 import { t, locale } from '../i18n'
 
 // ---------------------------------------------------------------- notes
+/** The Notes tab: a list of separate notes, pinned first, then newest first. */
 export function NotesTab({ item }: { item: Item }) {
-  const [text, setText] = useState(item.notes)
+  const all = useApp((st) => st.data.notes)
+  const notes = useMemo(
+    () => all.filter((n) => n.item_id === item.id).sort((x, y) => Number(y.pinned) - Number(x.pinned) || y.created_at.localeCompare(x.created_at)),
+    [all, item.id],
+  )
+  const [params, setParams] = useSearchParams()
+  const [editing, setEditing] = useState<string | null>(() => params.get('note'))
+  useEffect(() => {
+    const n = params.get('note')
+    if (n) { setEditing(n); params.delete('note'); setParams(params, { replace: true }) }
+  }, [params]) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="rise flex flex-col gap-3">
+      <div className="flex justify-end">
+        <Button size="sm" variant="primary" onClick={() => setEditing(addNote(item.id))}><Plus size={16} /> {t('notes.add')}</Button>
+      </div>
+      {!notes.length && <p className="py-8 text-center text-sm text-muted">{t('notes.empty')}</p>}
+      {notes.map((n) => (
+        <NoteCard key={n.id} note={n} editing={editing === n.id} onEdit={() => setEditing(n.id)} onDone={() => setEditing(null)} />
+      ))}
+    </div>
+  )
+}
+
+function NoteCard({ note, editing, onEdit, onDone }: { note: Note; editing: boolean; onEdit: () => void; onDone: () => void }) {
+  const [text, setText] = useState(note.body)
   const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const latest = useRef(text)
+  const latest = useRef({ v: note.body, saved: note.body })
   const ref = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => { setText(item.notes); latest.current = item.notes }, [item.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!editing) { setText(note.body); latest.current = { v: note.body, saved: note.body } } }, [note.body, editing])
   useEffect(() => {
     const el = ref.current
-    if (el) { el.style.height = 'auto'; el.style.height = Math.max(240, el.scrollHeight) + 'px' }
-  }, [text])
-  // flush on unmount
-  useEffect(() => () => {
+    if (el) { el.style.height = 'auto'; el.style.height = Math.max(120, el.scrollHeight) + 'px' }
+  }, [text, editing])
+  const save = (v: string) => {
     clearTimeout(timer.current)
-    if (latest.current !== useApp.getState().data.items.find((i) => i.id === item.id)?.notes) void updateItem(item.id, { notes: latest.current })
-  }, [item.id])
-  const onChange = (v: string) => {
-    setText(v)
-    latest.current = v
-    setState('saving')
-    clearTimeout(timer.current)
-    timer.current = setTimeout(async () => {
-      await updateItem(item.id, { notes: v })
-      setState('saved')
-    }, 700)
+    if (v === latest.current.saved) return
+    latest.current.saved = v
+    void updateNote(note.id, { body: v })
+    setState('saved')
   }
+  const finish = () => {
+    save(latest.current.v)
+    // a new note left empty is not kept
+    if (!latest.current.v.trim()) void deleteNote(note.id)
+    onDone()
+  }
+  // save what was typed if the page goes away mid-edit
+  useEffect(() => () => { clearTimeout(timer.current); if (latest.current.v !== latest.current.saved) void updateNote(note.id, { body: latest.current.v }) }, [note.id])
+  const when = (iso: string) => new Date(iso).toLocaleString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  const edited = Date.parse(note.updated_at) - Date.parse(note.created_at) > 60_000
   return (
-    <div className="rise">
-      <textarea
-        ref={ref}
-        value={text}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={t('notes.placeholder')}
-        dir="auto"
-        className="block w-full resize-none rounded-3xl border border-line bg-surface p-5 text-[16px] leading-relaxed text-ink outline-none transition placeholder:text-muted/60 focus:border-accent focus:ring-2 focus:ring-accent/20"
-      />
-      <div className="mt-2 h-4 text-right text-xs text-muted">{state === 'saving' ? t('notes.saving') : state === 'saved' ? t('notes.saved') : ''}</div>
+    <div className={cx('rounded-3xl border bg-surface p-4', note.pinned ? 'border-accent/60' : 'border-line')}>
+      {editing ? (
+        <>
+          <textarea
+            ref={ref}
+            autoFocus
+            value={text}
+            dir="auto"
+            placeholder={t('notes.placeholder')}
+            onChange={(e) => {
+              const v = e.target.value
+              setText(v); latest.current.v = v; setState('saving')
+              clearTimeout(timer.current)
+              timer.current = setTimeout(() => save(v), 700)
+            }}
+            className="block w-full resize-none bg-transparent text-[16px] leading-relaxed text-ink outline-none placeholder:text-muted/60"
+          />
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <span className="text-xs text-muted">{state === 'saving' ? t('notes.saving') : state === 'saved' ? t('notes.saved') : ''}</span>
+            <Button size="sm" variant="primary" onClick={finish}>{t('common.done')}</Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <button onClick={onEdit} className="block w-full text-left" aria-label={t('common.edit')}>
+            <p dir="auto" className="whitespace-pre-line text-[16px] leading-relaxed text-ink">{note.body}</p>
+          </button>
+          <div className="mt-3 flex items-center gap-1 text-xs text-muted">
+            {note.pinned && <Pin size={12} className="mr-0.5 text-accent-strong" />}
+            <span className="flex-1">{edited ? t('notes.edited', { when: when(note.updated_at) }) : when(note.created_at)}</span>
+            <IconButton label={note.pinned ? t('notes.unpin') : t('notes.pin')} className="h-8 w-8" onClick={() => updateNote(note.id, { pinned: !note.pinned })}>
+              {note.pinned ? <PinOff size={15} /> : <Pin size={15} />}
+            </IconButton>
+            <IconButton label={t('common.edit')} className="h-8 w-8" onClick={onEdit}><Pencil size={15} /></IconButton>
+            <IconButton
+              label={t('common.delete')}
+              className="h-8 w-8"
+              onClick={async () => { if (await confirmDialog(t('notes.deleteConfirm'), { danger: true, okLabel: t('common.delete') })) void deleteNote(note.id) }}
+            >
+              <Trash2 size={15} />
+            </IconButton>
+          </div>
+        </>
+      )}
     </div>
   )
 }

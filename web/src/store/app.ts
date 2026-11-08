@@ -3,7 +3,7 @@ import { backend } from '../lib/backend'
 import type { HealthState } from '../lib/backend/types'
 import { isNetworkError } from '../lib/backend/supabase'
 import type {
-  AppUser, CostLine, Item, Media, Session, Settings, ShareLink, Snapshot, Status, TableName, Template, TemplateNode,
+  AppUser, CostLine, Item, Media, Note, Session, Settings, ShareLink, Snapshot, Status, TableName, Template, TemplateNode,
 } from '../lib/types'
 import { DEFAULT_SETTINGS } from '../lib/types'
 import { t } from '../i18n'
@@ -22,7 +22,8 @@ export interface PendingUpload {
 }
 
 const emptySnap = (): Snapshot => ({
-  items: [], statuses: [], sessions: [], media: [], cost_lines: [], templates: [], share_links: [], settings: { ...DEFAULT_SETTINGS },
+  items: [],
+  notes: [], statuses: [], sessions: [], media: [], cost_lines: [], templates: [], share_links: [], settings: { ...DEFAULT_SETTINGS },
 })
 
 interface State {
@@ -94,7 +95,10 @@ let cacheTimer: ReturnType<typeof setTimeout> | undefined
 function readCache(): { user: AppUser; data: Snapshot } | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY)
-    return raw ? (JSON.parse(raw) as { user: AppUser; data: Snapshot }) : null
+    if (!raw) return null
+    const c = JSON.parse(raw) as { user: AppUser; data: Snapshot }
+    c.data.notes ??= [] // caches from before notes were a list
+    return c
   } catch { return null }
 }
 useApp.subscribe((s, prev) => {
@@ -431,6 +435,7 @@ export async function deleteItem(id: string, d: Snapshot = get().data) {
       media: s.media.filter((m) => !ids.has(m.item_id)),
       cost_lines: s.cost_lines.filter((c) => !ids.has(c.item_id)),
       share_links: s.share_links.filter((l) => !ids.has(l.item_id)),
+      notes: s.notes.filter((n) => !ids.has(n.item_id)),
     }),
     [{ k: 'remove', table: 'items', ids: [id] }, ...(keys.length ? [{ k: 'objects', keys } as Op] : [])],
   )
@@ -477,7 +482,16 @@ export async function duplicateItem(id: string): Promise<string | null> {
     childrenOf(d.items, it.id).forEach((k, i) => copy(k, c.id, i + 1, ''))
   }
   copy(src, src.parent_id, nextSort(d.items, src.parent_id), ' (copy)')
-  await commit((s) => ({ ...s, items: [...s.items, ...rows] }), [{ k: 'insert', table: 'items', rows }])
+  // notes come along, attached to the copies
+  const map = new Map<string, string>()
+  const walk = (orig: Item, cp: Item) => { map.set(orig.id, cp.id); const ok = childrenOf(d.items, orig.id); const ck = rows.filter((r) => r.parent_id === cp.id); ok.forEach((o, i) => ck[i] && walk(o, ck[i])) }
+  walk(src, rows[0])
+  const ts = now()
+  const noteRows: Note[] = d.notes.filter((n) => map.has(n.item_id)).map((n) => ({ id: uuid(), item_id: map.get(n.item_id)!, body: n.body, pinned: n.pinned, created_at: ts, updated_at: ts }))
+  await commit(
+    (s) => ({ ...s, items: [...s.items, ...rows], notes: [...s.notes, ...noteRows] }),
+    [{ k: 'insert', table: 'items', rows }, ...(noteRows.length ? [{ k: 'insert', table: 'notes', rows: noteRows } as Op] : [])],
+  )
   return rows[0].id
 }
 
@@ -706,6 +720,24 @@ export async function ensureUrls(keys: string[]) {
   } catch { /* shown as placeholders */ } finally {
     need.forEach((k) => inflight.delete(k))
   }
+}
+
+// ---------------------------------------------------------------- notes
+export function addNote(itemId: string, body = ''): string {
+  const ts = now()
+  const row: Note = { id: uuid(), item_id: itemId, body, pinned: false, created_at: ts, updated_at: ts }
+  void commit((s) => ({ ...s, notes: [...s.notes, row] }), [{ k: 'insert', table: 'notes', rows: [row] }])
+  return row.id
+}
+export function updateNote(id: string, patch: Partial<Note>) {
+  const ts = now()
+  return commit(
+    (s) => ({ ...s, notes: s.notes.map((n) => (n.id === id ? { ...n, ...patch, updated_at: patch.body !== undefined ? ts : n.updated_at } : n)) }),
+    [{ k: 'update', table: 'notes', id, patch }],
+  )
+}
+export function deleteNote(id: string) {
+  return commit((s) => ({ ...s, notes: s.notes.filter((n) => n.id !== id) }), [{ k: 'remove', table: 'notes', ids: [id] }])
 }
 
 // ---------------------------------------------------------------- costs

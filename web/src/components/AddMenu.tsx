@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ImagePlus, LayoutTemplate, ListPlus, Plus, SquarePlus } from 'lucide-react'
-import { useApp, createItem, toast, uploadFiles } from '../store/app'
+import { ImagePlus, ListPlus, MoreHorizontal, Plus, SquarePlus, StickyNote } from 'lucide-react'
+import { useApp, addNote, createItem, toast, uploadFiles } from '../store/app'
 import { NewItemSheet } from './ItemBits'
 import { Button, Sheet, cx } from './ui'
 import { t } from '../i18n'
@@ -17,6 +17,7 @@ function countNodes(n: { children?: unknown[] }[]): number {
  */
 export function AddMenu({ parentId, parentTitle, aboveBar = false, variant = 'both' }: { parentId: string | null; parentTitle?: string; aboveBar?: boolean; variant?: 'both' | 'fab' | 'button' }) {
   const [sheet, setSheet] = useState<null | 'menu' | 'item' | 'template'>(null)
+  const nav = useNavigate()
   const file = useRef<HTMLInputElement>(null)
   return (
     <>
@@ -48,7 +49,8 @@ export function AddMenu({ parentId, parentTitle, aboveBar = false, variant = 'bo
         parentTitle={parentTitle}
         onPick={(what) => {
           if (what === 'upload') { setSheet(null); file.current?.click() }
-          else setSheet(what)
+          else if (what === 'note' && parentId) { setSheet(null); const id = addNote(parentId); nav(`/i/${parentId}?tab=notes&note=${id}`) }
+          else if (what !== 'note') setSheet(what)
         }}
       />
       <NewItemSheet open={sheet === 'item'} onClose={() => setSheet(null)} parentId={parentId} stay={!!parentId} />
@@ -58,25 +60,35 @@ export function AddMenu({ parentId, parentTitle, aboveBar = false, variant = 'bo
 }
 
 function AddSheet({ open, onClose, onPick, canUpload, parentTitle }: {
-  open: boolean; onClose: () => void; onPick: (w: 'item' | 'template' | 'upload') => void; canUpload: boolean; parentTitle?: string
+  open: boolean; onClose: () => void; onPick: (w: 'item' | 'template' | 'upload' | 'note') => void; canUpload: boolean; parentTitle?: string
 }) {
   const templates = useApp((s) => s.data.templates)
-  const Opt = ({ icon, title, hint, onClick, disabled }: { icon: React.ReactNode; title: string; hint: string; onClick: () => void; disabled?: boolean }) => (
-    <button onClick={onClick} disabled={disabled} className="flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left transition hover:bg-surface-2 disabled:opacity-40">
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent-soft text-accent-strong">{icon}</span>
-      <span className="min-w-0">
-        <span className="block font-medium">{title}</span>
-        <span className="block text-[13px] text-muted">{hint}</span>
-      </span>
-    </button>
+  /** One row; `more` adds a "⋯" button on the right (e.g. "from a template"). */
+  const Opt = ({ icon, title, hint, onClick, more }: { icon: React.ReactNode; title: string; hint: string; onClick: () => void; more?: { label: string; run: () => void } }) => (
+    <div className="flex items-center gap-1 rounded-2xl transition hover:bg-surface-2">
+      <button onClick={onClick} className="flex min-w-0 flex-1 items-center gap-4 px-3 py-3 text-left">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent-soft text-accent-strong">{icon}</span>
+        <span className="min-w-0">
+          <span className="block font-medium">{title}</span>
+          <span className="block text-[13px] text-muted">{hint}</span>
+        </span>
+      </button>
+      {more && (
+        <button onClick={more.run} aria-label={more.label} title={more.label} className="mr-2 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-line/60 hover:text-ink">
+          <MoreHorizontal size={20} />
+        </button>
+      )}
+    </div>
   )
+  // "⋯" next to New project / New subtask opens the templates (only when there are any)
+  const fromTemplate = templates.length ? { label: t('add.template'), run: () => onPick('template') } : undefined
   return (
     <Sheet open={open} onClose={onClose} title={t('add.title')}>
       <div className="flex flex-col gap-1">
         {canUpload
-          ? <Opt icon={<ListPlus size={21} />} title={t('add.subtask')} hint={t('add.subtaskHint', { title: parentTitle ?? '' })} onClick={() => onPick('item')} />
-          : <Opt icon={<SquarePlus size={21} />} title={t('add.project')} hint={t('add.projectHint')} onClick={() => onPick('item')} />}
-        <Opt icon={<LayoutTemplate size={21} />} title={t('add.template')} hint={templates.length ? t('add.templateHint') : t('settings.noTemplates')} onClick={() => onPick('template')} disabled={!templates.length} />
+          ? <Opt icon={<ListPlus size={21} />} title={t('add.subtask')} hint={t('add.subtaskHint', { title: parentTitle ?? '' })} onClick={() => onPick('item')} more={fromTemplate} />
+          : <Opt icon={<SquarePlus size={21} />} title={t('add.project')} hint={t('add.projectHint')} onClick={() => onPick('item')} more={fromTemplate} />}
+        {canUpload && <Opt icon={<StickyNote size={21} />} title={t('add.note')} hint={t('add.noteHint', { title: parentTitle ?? '' })} onClick={() => onPick('note')} />}
         {canUpload && <Opt icon={<ImagePlus size={21} />} title={t('add.upload')} hint={t('add.uploadHint', { title: parentTitle ?? '' })} onClick={() => onPick('upload')} />}
       </div>
     </Sheet>

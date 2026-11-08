@@ -26,6 +26,8 @@ export const en = {
   'add.subtaskHint': 'A step or a piece inside "{title}". Subtasks can have subtasks.',
   'add.template': 'New from template',
   'add.templateHint': 'Starts with the same subtasks every time.',
+  'add.note': 'Add note',
+  'add.noteHint': 'A new note on "{title}".',
   'add.upload': 'Upload photos / videos',
   'add.uploadHint': 'Into "{title}".',
   'add.new': 'New',
@@ -129,6 +131,12 @@ export const en = {
 
   'notes.placeholder': 'Write anything: ideas, recipes, temperatures, who it is for…',
   'notes.saved': 'Saved',
+  'notes.add': 'Add note',
+  'notes.empty': 'No notes yet.',
+  'notes.edited': 'Edited {when}',
+  'notes.pin': 'Pin to top',
+  'notes.unpin': 'Unpin',
+  'notes.deleteConfirm': 'Delete this note?',
   'notes.saving': 'Saving…',
 
   'log.week': 'You worked {time} this week',

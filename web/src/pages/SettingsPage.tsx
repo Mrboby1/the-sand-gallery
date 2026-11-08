@@ -248,7 +248,7 @@ function NotificationsSection() {
               if (n > 0) toast(tn('notif.testSent', n))
               else {
                 const reg = await navigator.serviceWorker.ready
-                await reg.showNotification('The Sand Gallery', { body: 'Notifications work on this device.', tag: 'test', icon: '/icon-192.png' })
+                await reg.showNotification('The Sand Gallery', { body: 'Notifications work on this device.', tag: 'test', icon: '/icon-192.png', badge: '/badge-96.png' })
                 toast(t('notif.testLocal'))
               }
             } finally { setBusy(false) }

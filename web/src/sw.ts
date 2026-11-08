@@ -43,7 +43,7 @@ self.addEventListener('push', (e) => {
   try { d = e.data?.json() as PushData } catch { return }
   e.waitUntil((async () => {
     if (d.type === 'test') {
-      await self.registration.showNotification('The Sand Gallery', { body: 'Notifications work on this device.', tag: 'test', icon: '/icon-192.png' })
+      await self.registration.showNotification('The Sand Gallery', { body: 'Notifications work on this device.', tag: 'test', icon: '/icon-192.png', badge: '/badge-96.png' })
       return
     }
     if (d.type === 'timer-stop') {
@@ -52,7 +52,7 @@ self.addEventListener('push', (e) => {
       await kvSet('timerShown', null)
       // Chrome wants every push to show something unless the app is on screen: a short confirmation.
       if (open.length && !(await anyVisibleWindow())) {
-        await self.registration.showNotification('⏹ Timer stopped', { tag: TIMER_TAG, silent: true, icon: '/icon-192.png' })
+        await self.registration.showNotification('⏹ Timer stopped', { tag: TIMER_TAG, silent: true, icon: '/icon-192.png', badge: '/badge-96.png' })
         setTimeout(() => { void self.registration.getNotifications({ tag: TIMER_TAG }).then((ns) => ns.forEach((n) => n.close())) }, 4000)
       }
       return

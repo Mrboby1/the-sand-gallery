@@ -75,8 +75,9 @@ export class SupabaseBackend implements Backend {
 
   async loadAll(): Promise<Snapshot> {
     await this.sb.rpc('ensure_defaults')
-    const [items, statuses, sessions, media, cost_lines, templates, share_links, settingsRows] = await Promise.all([
+    const [items, notes, statuses, sessions, media, cost_lines, templates, share_links, settingsRows] = await Promise.all([
       this.all<Snapshot['items'][number]>('items'),
+      this.all<Snapshot['notes'][number]>('notes'),
       this.all<Snapshot['statuses'][number]>('statuses', 'sort_order'),
       this.all<Snapshot['sessions'][number]>('sessions', 'started_at'),
       this.all<Snapshot['media'][number]>('media'),
@@ -88,7 +89,7 @@ export class SupabaseBackend implements Backend {
     const settings = { ...DEFAULT_SETTINGS, ...((settingsRows.data?.[0] as Settings | undefined) ?? {}) }
     for (const n of ['hourly_rate', 'markup_pct'] as const) settings[n] = Number(settings[n])
     for (const c of cost_lines) { c.qty = Number(c.qty); c.unit_cost = Number(c.unit_cost) }
-    return { items, statuses, sessions, media, cost_lines, templates, share_links, settings }
+    return { items, notes, statuses, sessions, media, cost_lines, templates, share_links, settings }
   }
 
   async insert<T extends TableName>(table: T, rows: TableRow[T][]) {
@@ -126,7 +127,7 @@ export class SupabaseBackend implements Backend {
     let t: ReturnType<typeof setTimeout> | undefined
     const fire = () => { clearTimeout(t); t = setTimeout(onRemoteChange, 600) }
     const ch = this.sb.channel('sg-changes')
-    for (const table of ['items', 'sessions', 'media', 'statuses', 'cost_lines', 'templates', 'share_links', 'settings'])
+    for (const table of ['items', 'notes', 'sessions', 'media', 'statuses', 'cost_lines', 'templates', 'share_links', 'settings'])
       ch.on('postgres_changes', { event: '*', schema: 'public', table }, fire)
     ch.subscribe()
     return () => { clearTimeout(t); void this.sb.removeChannel(ch) }

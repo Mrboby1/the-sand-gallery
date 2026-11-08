@@ -31,6 +31,17 @@ export interface Item {
   finished_at?: ISODate | null
 }
 
+/** One note of an item (an item can have many; newest first, pinned ones on top). */
+export interface Note {
+  id: UUID
+  owner_id?: UUID
+  item_id: UUID
+  body: string
+  pinned: boolean
+  created_at: ISODate
+  updated_at: ISODate
+}
+
 export interface Session {
   id: UUID
   owner_id?: UUID
@@ -119,6 +130,7 @@ export interface Settings {
 
 export interface Snapshot {
   items: Item[]
+  notes: Note[]
   statuses: Status[]
   sessions: Session[]
   media: Media[]
@@ -128,10 +140,11 @@ export interface Snapshot {
   settings: Settings
 }
 
-export type TableName = 'items' | 'statuses' | 'sessions' | 'media' | 'cost_lines' | 'templates' | 'share_links'
+export type TableName = 'items' | 'notes' | 'statuses' | 'sessions' | 'media' | 'cost_lines' | 'templates' | 'share_links'
 
 export interface TableRow {
   items: Item
+  notes: Note
   statuses: Status
   sessions: Session
   media: Media

@@ -10,7 +10,7 @@ export default defineConfig({
     VitePWA({
       // updates are handled in src/lib/updates.ts (check often, take over at once, reload when safe)
       registerType: 'prompt',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'maskable-512.png'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'maskable-512.png', 'badge-96.png'],
       manifest: {
         id: '/',
         name: 'The Sand Gallery',

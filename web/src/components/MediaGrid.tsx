@@ -16,6 +16,7 @@ export function MediaSection({ item }: { item: Item }) {
   const uploads = allPending.filter((u) => u.itemId === item.id)
   const [filter, setFilter] = useState<Filter>('all')
   const [open, setOpen] = useState<number | null>(null)
+  const [noteOpen, setNoteOpen] = useState(false)
   const [drag, setDrag] = useState(false)
   const picker = useRef<HTMLInputElement>(null)
   const pick = () => picker.current?.click()
@@ -67,11 +68,11 @@ export function MediaSection({ item }: { item: Item }) {
           </button>
         )
       ) : (
-        <div className="grid grid-cols-3 gap-1 overflow-hidden rounded-2xl sm:grid-cols-4 sm:gap-1.5 lg:grid-cols-6">
+        <div className="grid grid-cols-3 gap-x-1 gap-y-1.5 overflow-hidden rounded-2xl sm:grid-cols-4 sm:gap-x-1.5 sm:gap-y-2 lg:grid-cols-6">
           {shown.map((m, i) => (
+            <div key={m.id} className="flex min-w-0 flex-col">
             <button
-              key={m.id}
-              onClick={() => setOpen(i)}
+              onClick={() => { setNoteOpen(false); setOpen(i) }}
               aria-label={`${t(m.kind === 'video' ? 'gallery.video' : 'gallery.photo')} ${i + 1}${item.cover_media_id === m.id ? ` (${t('gallery.isCover')})` : ''}`}
               className="group relative aspect-square overflow-hidden bg-surface-2"
             >
@@ -83,8 +84,9 @@ export function MediaSection({ item }: { item: Item }) {
                 <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur"><Star size={10} fill="white" /> {t('gallery.isCover')}</span>
               )}
               {m.phase === 'finished' && <span className="absolute bottom-1.5 right-1.5 h-2 w-2 rounded-full bg-[#5f9e6e] ring-2 ring-white/80" title={t('gallery.finished')} />}
-              {m.note && <NoteBadge />}
             </button>
+            {m.note && <NoteBubble note={m.note} onOpen={() => { setNoteOpen(true); setOpen(i) }} />}
+            </div>
           ))}
           {uploads.map((u) => (
             <div key={u.id} className="relative flex aspect-square flex-col items-center justify-center gap-1.5 overflow-hidden bg-surface-2 p-2 text-center">
@@ -120,14 +122,14 @@ export function MediaSection({ item }: { item: Item }) {
       )}
       {drag && <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-3xl text-lg font-medium text-accent-strong">{t('gallery.dropHere')}</div>}
       {open !== null && shown[open] && (
-        <Lightbox list={shown} index={open} item={item} onIndex={setOpen} onClose={() => setOpen(null)} />
+        <Lightbox list={shown} index={open} item={item} onIndex={(i) => { setNoteOpen(false); setOpen(i) }} onClose={() => setOpen(null)} noteOpen={noteOpen} />
       )}
     </section>
   )
 }
 
 /** Full-screen viewer. `readOnly` (gallery mode) hides the editing actions. */
-export function Lightbox({ list, index, item, onIndex, onClose, readOnly }: { list: Media[]; index: number; item: Item; onIndex: (i: number) => void; onClose: () => void; readOnly?: boolean }) {
+export function Lightbox({ list, index, item, onIndex, onClose, readOnly, noteOpen }: { list: Media[]; index: number; item: Item; onIndex: (i: number) => void; onClose: () => void; readOnly?: boolean; noteOpen?: boolean }) {
   const m = list[index]
   const url = useMediaUrl(m.object_key)
   const thumb = useMediaUrl(m.thumb_key)
@@ -180,7 +182,7 @@ export function Lightbox({ list, index, item, onIndex, onClose, readOnly }: { li
         {index > 0 && <button aria-label="Previous" onClick={prev} className="absolute left-3 hidden h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 sm:flex"><ChevronLeft /></button>}
         {index < list.length - 1 && <button aria-label="Next" onClick={next} className="absolute right-3 hidden h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 sm:flex"><ChevronRight /></button>}
       </div>
-      <MediaNote key={m.id} media={m} />
+      <MediaNote key={m.id} media={m} initialOpen={noteOpen} />
       {readOnly ? (
         <div className="flex items-center justify-center gap-2 px-3 py-3 safe-bottom">
           {url && <LbButton label={t('gallery.download')} onClick={() => window.open(url, '_blank', 'noopener')}><ExternalLink size={16} /></LbButton>}
@@ -218,6 +220,23 @@ export function Lightbox({ list, index, item, onIndex, onClose, readOnly }: { li
   )
 }
 
+/** Speech bubble under a picture that has a note: a one-line preview; tapping opens the note. */
+export function NoteBubble({ note, onOpen }: { note: string; onOpen: () => void }) {
+  return (
+    <button
+      onClick={onOpen}
+      title={note}
+      aria-label={`${t('note.has')}: ${note}`}
+      className="relative mx-0.5 mt-1.5 flex min-w-0 items-center gap-1 rounded-lg bg-surface-2 px-1.5 py-1 text-left text-[11px] leading-tight text-ink/85 transition hover:bg-accent-soft"
+    >
+      {/* the bubble's little tail, pointing up at the picture */}
+      <span aria-hidden className="absolute -top-1 left-2.5 h-2 w-2 rotate-45 bg-inherit" />
+      <MessageSquareText size={12} className="relative shrink-0 text-accent-strong" />
+      <span dir="auto" className="relative min-w-0 truncate">{note}</span>
+    </button>
+  )
+}
+
 /** Small "has a note" marker for media tiles. */
 export function NoteBadge() {
   return (
@@ -231,9 +250,9 @@ export function NoteBadge() {
  * The note / caption of a photo or video, under the picture in the lightbox: two lines (tap to expand),
  * an "Add note" button, and an editor that saves as you type (through the offline queue).
  */
-export function MediaNote({ media, editable = true }: { media: Media; editable?: boolean }) {
+export function MediaNote({ media, editable = true, initialOpen = false }: { media: Media; editable?: boolean; initialOpen?: boolean }) {
   const [editing, setEditing] = useState(false)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(initialOpen)
   const [v, setV] = useState(media.note ?? '')
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const latest = useRef({ v: media.note ?? '', saved: media.note ?? '' })
