@@ -140,7 +140,48 @@ async function b2Delete(env: Env, key: string) {
 // ------------------------------------------------------------------ auth
 const userCache = new Map<string, { id: string; exp: number }>()
 
+/**
+ * The online version is private (migration 0011): the caller's e-mail must be on public.allowed_emails.
+ * Answer cached per user for 5 minutes in memory; if the database cannot be reached (asleep), a "yes" from the last
+ * 7 days (KV) still lets media through, so photos keep showing while the project wakes up.
+ */
+const accessCache = new Map<string, { ok: boolean; exp: number }>()
+async function requireAllowed(env: Env, user: { id: string; token: string }) {
+  const c = accessCache.get(user.id)
+  if (c && c.exp > Date.now()) { if (!c.ok) throw new HttpError(403, 'not_allowed'); return }
+  let ok: boolean | null = null
+  try {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/is_allowed`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${user.token}`, apikey: env.SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      body: '{}',
+    })
+    if (res.ok) ok = (await res.json()) === true
+  } catch { /* unreachable */ }
+  const kvKey = `allowed:${user.id}`
+  if (ok === null) {
+    // database unreachable: trust a recent yes
+    if ((await env.RATE.get(kvKey)) === '1') return
+    throw new HttpError(503, 'cannot check access right now')
+  }
+  if (accessCache.size > 500) accessCache.clear()
+  accessCache.set(user.id, { ok, exp: Date.now() + 5 * 60_000 })
+  if (!ok) { await env.RATE.delete(kvKey).catch(() => {}); throw new HttpError(403, 'not_allowed') }
+  // remember the yes (written at most once a day per user: KV writes are limited)
+  const stamp = `allowed-at:${user.id}`
+  if (!(await env.RATE.get(stamp))) {
+    await env.RATE.put(kvKey, '1', { expirationTtl: 7 * 86400 }).catch(() => {})
+    await env.RATE.put(stamp, '1', { expirationTtl: 86400 }).catch(() => {})
+  }
+}
+
 async function requireUser(env: Env, req: Request): Promise<{ id: string; token: string }> {
+  const user = await requireSignedIn(env, req)
+  await requireAllowed(env, user)
+  return user
+}
+
+async function requireSignedIn(env: Env, req: Request): Promise<{ id: string; token: string }> {
   const auth = req.headers.get('Authorization') ?? ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
   if (!token) throw new HttpError(401, 'missing token')

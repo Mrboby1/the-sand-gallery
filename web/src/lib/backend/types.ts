@@ -10,6 +10,9 @@ export interface UploadPart {
   ext: string
 }
 
+export interface Access { allowed: boolean; admin: boolean; email: string | null }
+export interface AllowedEmail { email: string; is_admin: boolean; added_at: string }
+
 export interface UploadResult {
   object_key: string
   thumb_key: string | null
@@ -64,6 +67,14 @@ export interface Backend {
 
   /** Runs the nightly JSON backup right now. */
   backupNow(): Promise<{ ok: boolean; key?: string; counts?: Record<string, number>; reason?: string }>
+
+  // private online version (allow-list, migration 0011); the local backend allows everything
+  /** May the signed-in person use this backend? Throws on network errors. */
+  access(): Promise<Access>
+  /** Owner only: the allow-list. */
+  listAllowed(): Promise<AllowedEmail[]>
+  addAllowed(email: string): Promise<void>
+  removeAllowed(email: string): Promise<void>
 
   // database wake-up
   health(): Promise<HealthState>

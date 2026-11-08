@@ -7,7 +7,7 @@ import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { FeaturesPage } from './pages/FeaturesPage'
 import { SharePage } from './pages/SharePage'
-import { Login } from './pages/Login'
+import { Login, NotAllowed } from './pages/Login'
 import { Toasts, WakeLayer } from './components/Shell'
 import { RunningChip } from './components/Timer'
 import { ItemMenuHost } from './components/ItemMenu'
@@ -38,6 +38,7 @@ function Gate() {
     )
   }
   if (phase === 'signedOut') return <Login />
+  if (phase === 'notAllowed') return <NotAllowed />
   if (phase !== 'ready') {
     if (health !== 'unreachable') return null
     return (

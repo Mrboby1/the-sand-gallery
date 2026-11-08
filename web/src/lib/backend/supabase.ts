@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js'
-import type { Backend, HealthState, UploadPart, UploadResult } from './types'
+import type { Access, AllowedEmail, Backend, HealthState, UploadPart, UploadResult } from './types'
 import type { AppUser, Session, Settings, SharedGallery, Snapshot, TableName, TableRow } from '../types'
 import { DEFAULT_SETTINGS } from '../types'
 
@@ -131,6 +131,27 @@ export class SupabaseBackend implements Backend {
       ch.on('postgres_changes', { event: '*', schema: 'public', table }, fire)
     ch.subscribe()
     return () => { clearTimeout(t); void this.sb.removeChannel(ch) }
+  }
+
+  // ---------- allow-list ----------
+  async access(): Promise<Access> {
+    const { data, error } = await this.sb.rpc('access_check')
+    if (error) throw error
+    const d = (data ?? {}) as Partial<Access>
+    return { allowed: d.allowed === true, admin: d.admin === true, email: d.email ?? null }
+  }
+  async listAllowed(): Promise<AllowedEmail[]> {
+    const { data, error } = await this.sb.from('allowed_emails').select('email, is_admin, added_at').order('is_admin', { ascending: false }).order('email')
+    if (error) throw error
+    return (data ?? []) as AllowedEmail[]
+  }
+  async addAllowed(email: string) {
+    const { error } = await this.sb.from('allowed_emails').insert({ email: email.trim().toLowerCase() })
+    if (error && error.code !== '23505') throw error // already on the list: fine
+  }
+  async removeAllowed(email: string) {
+    const { error } = await this.sb.from('allowed_emails').delete().eq('email', email.trim().toLowerCase())
+    if (error) throw error
   }
 
   // ---------- worker calls ----------

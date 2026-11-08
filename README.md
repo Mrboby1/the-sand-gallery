@@ -117,6 +117,32 @@ A paused hourglass blends its outline, rims and sand toward `--freeze` (`freeze_
 transitions, the canvas grains blend over ~0.8 s, and a static frost layer (tint, frosted edges, crystals) fades in.
 The timer card and time text take an icy tint too. Small CSS glyphs get a lighter tint. Nothing animates while frozen.
 
+### Offline version
+"Use the offline version" on the sign-in page (or Settings > Your data) runs the app on the `LocalBackend`
+(localStorage + IndexedDB, no account, nothing uploaded). The choice is per device (`localStorage sg.backend=local`,
+`src/lib/offline.ts`); switching reloads with the other backend. An explainer is shown before it starts (data lives
+only in this browser, clearing site data or uninstalling deletes it, export regularly). Settings shows storage use,
+asks for persistent storage, and offers the browser's install prompt ("download" the app) when it has one.
+
+### Export / import (`.sandgallery`)
+`src/lib/portable.ts` + `src/lib/zip.ts`: a plain ZIP (stored entries, readable by any unzip tool) with
+`manifest.json` (format `sand-gallery-export`, version 1, `origin` + `key`: `offline:<device id>` or
+`cloud:<user id>`, counts, file list), `data.json` (all rows) and `media/` (originals + thumbnails). Import merges:
+rows with an existing id are skipped, statuses are matched by name, open timers are closed at the export time, share
+links are not imported, settings only when the target is empty. Routing: in the offline version everything goes to
+local storage; in the online version a **cloud** file is restored into the account (media re-uploaded to B2), and an
+**offline** file is never uploaded: it is imported into local storage and the app switches to the offline version.
+Anything without a clear `cloud:` key counts as offline. Limit: 4 GB per file (no ZIP64).
+
+### Private online version (allow-list)
+Migration 0011: `public.allowed_emails` (owner = `is_admin`), `access_check()` for the app, a RESTRICTIVE
+`allowlist` RLS policy on every table, and the Auth hook `hook_before_user_created` (enabled with
+`scripts/auth-hook.ps1 -Action enable`) that refuses new accounts for addresses not on the list. The Worker checks
+`is_allowed` before media/upload/backup/push calls (cached 5 min; a recent yes in KV keeps photos working while the DB
+sleeps). Not-listed accounts get "This gallery is private" with a button to the offline version. The owner adds and
+removes people in Settings > Allowed people. Google OAuth is in testing mode: new people must also be added as test
+users in Google Cloud (or the consent screen published).
+
 ### Wake-up
 Free Supabase projects pause after 7 idle days (the daily cron should prevent it). If the app cannot reach the DB it
 asks the Worker; a paused project shows the banner "Your gallery is asleep 💤 Wake up", which calls `/api/wake` and

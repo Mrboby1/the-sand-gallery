@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { backend } from '../lib/backend'
+import type { Access } from '../lib/backend/types'
 import type { HealthState } from '../lib/backend/types'
 import { isNetworkError } from '../lib/backend/supabase'
 import type {
@@ -11,7 +12,8 @@ import { makeUploadParts } from '../lib/media'
 import type { UploadPart } from '../lib/backend/types'
 import { allJobs, askPersist, deleteJob, freeBytes, mb, putJob, type UploadJob } from '../lib/uploadQueue'
 
-export type Phase = 'booting' | 'signedOut' | 'loading' | 'ready'
+/** notAllowed: signed in to the online version with an account that is not on the allow-list. */
+export type Phase = 'booting' | 'signedOut' | 'loading' | 'ready' | 'notAllowed'
 
 export interface Toast { id: number; text: string; tone?: 'info' | 'error'; action?: { label: string; run: () => void } }
 export interface PendingUpload {
@@ -38,6 +40,8 @@ interface State {
   urls: Record<string, string>
   /** Changes made offline that are waiting to be sent. */
   queued: number
+  /** Allow-list answer for the signed-in person (online version). */
+  access: Access | null
 }
 
 const now = () => new Date().toISOString()
@@ -53,6 +57,7 @@ export const useApp = create<State>(() => ({
   pending: [],
   urls: {},
   queued: 0,
+  access: readAccess(),
 }))
 
 const get = useApp.getState
@@ -86,6 +91,12 @@ export function friendlyError(e: unknown): { text: string; action?: Toast['actio
   if (isNetworkError(e)) return { text: t('sync.offline') }
   if (isAuthError(e)) return { text: t('error.session'), action: { label: t('error.signIn'), run: () => void signOut() } }
   return { text: t('error.save') }
+}
+
+// ---------------------------------------------------------------- allow-list answer (kept for offline starts)
+const ACCESS_KEY = 'sg.access'
+function readAccess(): Access | null {
+  try { const raw = localStorage.getItem(ACCESS_KEY); return raw ? (JSON.parse(raw) as Access) : null } catch { return null }
 }
 
 // ---------------------------------------------------------------- local cache (offline start)
@@ -217,7 +228,8 @@ export async function boot() {
     if (!user && prev) {
       set({ phase: 'signedOut', data: emptySnap() })
       unsubRemote?.(); unsubRemote = null
-      try { localStorage.removeItem(CACHE_KEY) } catch { /* ignore */ }
+      try { localStorage.removeItem(CACHE_KEY); localStorage.removeItem(ACCESS_KEY) } catch { /* ignore */ }
+      set({ access: null })
     }
   })
   window.addEventListener('online', () => void resync())
@@ -252,6 +264,12 @@ export function loadData(): Promise<void> {
   loading = (async () => {
     if (get().phase !== 'ready') set({ phase: 'loading' })
     try {
+      if (backend.mode === 'cloud') {
+        const a = await backend.access()
+        set({ access: a })
+        try { localStorage.setItem(ACCESS_KEY, JSON.stringify(a)) } catch { /* ignore */ }
+        if (!a.allowed) { set({ phase: 'notAllowed' }); return }
+      }
       const data = withoutPendingDeletes(await backend.loadAll())
       set({ data, phase: 'ready' })
       if (!unsubRemote) unsubRemote = backend.subscribe(() => scheduleRemoteReload())

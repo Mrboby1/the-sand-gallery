@@ -152,10 +152,10 @@ export function MenuItem({ icon, children, onClick, danger }: { icon?: ReactNode
 }
 
 // ---------------------------------------------------------------- confirm / prompt dialogs
-interface DialogReq { kind: 'confirm' | 'prompt'; title: string; body?: string; initial?: string; okLabel?: string; danger?: boolean; resolve: (v: string | boolean | null) => void }
+interface DialogReq { kind: 'confirm' | 'prompt'; title: string; body?: string; points?: string[]; initial?: string; okLabel?: string; danger?: boolean; resolve: (v: string | boolean | null) => void }
 const useDialog = create<{ req: DialogReq | null }>(() => ({ req: null }))
 
-export function confirmDialog(title: string, opts: { body?: string; okLabel?: string; danger?: boolean } = {}): Promise<boolean> {
+export function confirmDialog(title: string, opts: { body?: string; points?: string[]; okLabel?: string; danger?: boolean } = {}): Promise<boolean> {
   return new Promise((resolve) => useDialog.setState({ req: { kind: 'confirm', title, ...opts, resolve: (v) => resolve(v === true) } }))
 }
 export function promptDialog(title: string, initial = '', okLabel?: string): Promise<string | null> {
@@ -172,6 +172,11 @@ export function DialogHost() {
     <Sheet open onClose={() => close(null)} title={req.title}>
       <form onSubmit={(e) => { e.preventDefault(); close(req.kind === 'prompt' ? val.trim() : true) }}>
         {req.body && <p className="mb-4 text-[15px] leading-relaxed text-muted">{req.body}</p>}
+        {req.points && (
+          <ul className="mb-5 flex flex-col gap-2.5 text-[15px] leading-relaxed">
+            {req.points.map((p, i) => <li key={i} className="flex gap-2.5"><span className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />{p}</li>)}
+          </ul>
+        )}
         {req.kind === 'prompt' && <Input autoFocus value={val} onChange={(e) => setVal(e.target.value)} className="mb-4" />}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={() => close(null)}>{t('common.cancel')}</Button>

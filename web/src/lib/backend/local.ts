@@ -1,4 +1,4 @@
-import type { Backend, HealthState, UploadPart, UploadResult } from './types'
+import type { Access, AllowedEmail, Backend, HealthState, UploadPart, UploadResult } from './types'
 import type { AppUser, Session, Settings, SharedGallery, Snapshot, TableName, TableRow } from '../types'
 import { DEFAULT_SETTINGS, DEFAULT_STATUSES } from '../types'
 
@@ -202,7 +202,7 @@ export class LocalBackend implements Backend {
       if (p.role === 'thumb') thumb_key = key
       else object_key = key
     }
-    for (let f = 0.2; f <= 1; f += 0.2) { onProgress?.(f); await delay(40) }
+    if (onProgress) for (let f = 0.2; f <= 1; f += 0.2) { onProgress(f); await delay(40) }
     return { object_key, thumb_key }
   }
   async mediaUrls(keys: string[]) {
@@ -250,6 +250,11 @@ export class LocalBackend implements Backend {
   async backupNow() {
     return { ok: true, key: '(local mode: data lives in this browser)' }
   }
+
+  async access(): Promise<Access> { return { allowed: true, admin: false, email: null } }
+  async listAllowed(): Promise<AllowedEmail[]> { return [] }
+  async addAllowed() {}
+  async removeAllowed() {}
 
   private wakeAt = 0
   async health(): Promise<HealthState> {

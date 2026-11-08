@@ -46,8 +46,13 @@ export function colorVars(c: CustomColors, dark: boolean): Record<string, string
 }
 
 /** Writes the colours onto <html> for the current theme (and again whenever the theme changes). */
+let liveTimer: ReturnType<typeof setTimeout> | undefined
+/** Applies the colours at once everywhere: CSS colour transitions (the 0.8 s freeze/thaw) are switched off while colours change, so glass, frost, text and the canvas sand move together. */
 export function applyColors(c: CustomColors = current) {
   current = c
+  document.documentElement.dataset.live = '1'
+  clearTimeout(liveTimer)
+  liveTimer = setTimeout(() => { delete document.documentElement.dataset.live }, 400)
   try { localStorage.setItem(KEY, JSON.stringify(c)) } catch { /* ignore */ }
   const root = document.documentElement
   const dark = root.dataset.theme === 'dark'

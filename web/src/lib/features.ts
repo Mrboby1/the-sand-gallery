@@ -53,6 +53,10 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
     { id: 'updates', keywords: 'update new version' },
     { id: 'wake', keywords: 'asleep wake up database' },
     { id: 'backups', keywords: 'backup nightly back up now data' },
+    { id: 'offlineVersion', keywords: 'offline version no account device install download local private' },
+    { id: 'export', keywords: 'export everything file download backup computer sandgallery' },
+    { id: 'import', keywords: 'import restore file open offline online' },
+    { id: 'private', keywords: 'private allowed people invite whitelist allow list sign in access' },
   ] },
 ]
 

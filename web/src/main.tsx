@@ -5,6 +5,7 @@ import { applyTheme } from './lib/theme'
 import App from './App'
 import { setupUpdates } from './lib/updates'
 import { applyColors } from './lib/customColors'
+import './lib/offline' // listens for the browser's install prompt from the start
 
 applyTheme()
 applyColors() // last used colours, before the data loads

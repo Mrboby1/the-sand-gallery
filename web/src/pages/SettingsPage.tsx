@@ -7,6 +7,7 @@ import { ArrowDown, ArrowUp, Bell, Check, Copy, DatabaseBackup, LogOut, Maximize
 import { useNavigate } from 'react-router-dom'
 import { FEATURE_GROUPS, featureHow, featureTitle } from '../lib/features'
 import { flashTo } from './FeaturesPage'
+import { AllowedPeople, DataSection } from './DataSection'
 import {
   useApp, addStatus, addTemplate, backend, deleteStatus, deleteTemplate, moveStatus, revokeShare, saveSettings, shareUrl,
   signOut, toast, updateStatus, updateTemplate,
@@ -36,6 +37,7 @@ function Section({ title, hint, children, id }: { title: string; hint?: string; 
 export function SettingsPage() {
   const data = useApp((s) => s.data)
   const user = useApp((s) => s.user)
+  const access = useApp((s) => s.access)
   const s = data.settings
   const [theme, setThemeState] = useState<ThemePref>(getTheme())
   const style = useStyle()
@@ -169,7 +171,17 @@ export function SettingsPage() {
           </Link>
         </Section>
 
-        <Section id="account" title={t('settings.account')}>
+        <Section id="data" title={t('data.section')} hint={backend.mode === 'local' ? t('data.sectionHint.offline') : t('data.sectionHint.online')}>
+          <DataSection />
+        </Section>
+
+        {backend.mode === 'cloud' && access?.admin && (
+          <Section id="allowed" title={t('allow.section')} hint={t('allow.sectionHint')}>
+            <AllowedPeople />
+          </Section>
+        )}
+
+        {backend.mode === 'cloud' && <Section id="account" title={t('settings.account')}>
           <div className="flex items-center gap-3">
             {user?.avatar_url ? <img src={user.avatar_url} alt="" className="h-11 w-11 rounded-full" referrerPolicy="no-referrer" /> : <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary font-display text-lg font-semibold text-on-primary">{(user?.name ?? user?.email ?? '?')[0]?.toUpperCase()}</div>}
             <div className="min-w-0 flex-1">
@@ -179,10 +191,10 @@ export function SettingsPage() {
             <Button size="sm" variant="outline" onClick={() => signOut()}><LogOut size={15} /> {t('settings.signOut')}</Button>
           </div>
           <div className="mt-4 flex items-center justify-between gap-3">
-            <p className="text-[13px] text-muted">{backend.mode === 'local' ? t('settings.mode.local') : t('settings.backups')}</p>
-            {backend.mode === 'cloud' && <BackupButton />}
+            <p className="text-[13px] text-muted">{t('settings.backups')}</p>
+            <BackupButton />
           </div>
-        </Section>
+        </Section>}
         <p className="py-4 text-center text-xs text-muted">{t('app.name')} · v{__APP_VERSION__}</p>
       </main>
       {editTpl && <TemplateSheet tpl={editTpl === 'new' ? null : editTpl} onClose={() => setEditTpl(null)} />}
@@ -386,6 +398,10 @@ function SettingsSearch() {
     { id: 'templates', label: t('settings.templates'), kw: 'template subtasks' },
     { id: 'share', label: t('settings.shareLinks'), kw: 'share link revoke public' },
     { id: 'features', label: t('settings.features'), kw: 'features tips help how' },
+    { id: 'data', label: t('data.export.button'), kw: 'export download file backup save computer zip sandgallery' },
+    { id: 'data', label: t('data.import.button'), kw: 'import restore upload file open sandgallery' },
+    { id: 'data', label: t('data.mode.offline'), kw: 'offline version no account device install download app local storage' },
+    { id: 'allowed', label: t('allow.section'), kw: 'allowed people invite whitelist allow list access private email' },
     { id: 'account', label: t('settings.account'), kw: 'sign out account backup back up logout' },
   ]
   const settingHits = needle ? settingsIndex.filter((r) => `${r.label} ${r.kw}`.toLowerCase().includes(needle)) : []
