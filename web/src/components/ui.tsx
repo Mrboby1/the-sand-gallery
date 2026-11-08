@@ -94,7 +94,7 @@ export function Sheet({ open, onClose, title, children, wide }: { open: boolean;
   }, [open, onClose])
   if (!open) return null
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="fixed inset-0 z-[95] flex items-end justify-center sm:items-center" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="fade absolute inset-0 bg-[#1a120a]/45 backdrop-blur-[2px]" onClick={onClose} />
       <div
         role="dialog"
