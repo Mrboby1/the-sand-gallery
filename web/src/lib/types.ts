@@ -56,6 +56,8 @@ export interface Media {
   height: number | null
   duration_s: number | null
   phase: MediaPhase
+  /** Note / caption for this photo or video. */
+  note?: string | null
   created_at: ISODate
 }
 
@@ -140,7 +142,7 @@ export interface SharedGallery {
   root_id: UUID
   items: Pick<Item, 'id' | 'parent_id' | 'title' | 'status_id' | 'cover_media_id' | 'sort_order'>[]
   statuses: Pick<Status, 'id' | 'name' | 'color'>[]
-  media: (Pick<Media, 'id' | 'item_id' | 'kind' | 'width' | 'height' | 'phase' | 'created_at'> & { url: string; thumb_url: string | null })[]
+  media: (Pick<Media, 'id' | 'item_id' | 'kind' | 'width' | 'height' | 'phase' | 'created_at' | 'note'> & { url: string; thumb_url: string | null })[]
 }
 
 export const DEFAULT_SETTINGS: Settings = {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertCircle, Camera, ChevronLeft, ChevronRight, CloudUpload, ExternalLink, ImagePlus, Play, Plus, RotateCw, Star, Trash2, X } from 'lucide-react'
+import { AlertCircle, Camera, ChevronLeft, ChevronRight, CloudUpload, ExternalLink, ImagePlus, MessageSquareText, Pencil, Play, Plus, RotateCw, Star, Trash2, X } from 'lucide-react'
 import type { Item, Media } from '../lib/types'
 import { useApp, deleteMedia, dismissUpload, pendingAsMedia, retryUpload, updateItem, updateMedia, uploadFiles } from '../store/app'
 import { useMediaQuery, useMediaUrl } from '../lib/hooks'
@@ -83,6 +83,7 @@ export function MediaSection({ item }: { item: Item }) {
                 <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur"><Star size={10} fill="white" /> {t('gallery.isCover')}</span>
               )}
               {m.phase === 'finished' && <span className="absolute bottom-1.5 right-1.5 h-2 w-2 rounded-full bg-[#5f9e6e] ring-2 ring-white/80" title={t('gallery.finished')} />}
+              {m.note && <NoteBadge />}
             </button>
           ))}
           {uploads.map((u) => (
@@ -135,7 +136,9 @@ export function Lightbox({ list, index, item, onIndex, onClose, readOnly }: { li
   const next = () => index < list.length - 1 && onIndex(index + 1)
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      const typing = e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement
+      if (e.key === 'Escape') { if (typing) (e.target as HTMLElement).blur(); else onClose() }
+      if (typing) return
       if (e.key === 'ArrowLeft') prev()
       if (e.key === 'ArrowRight') next()
     }
@@ -151,7 +154,7 @@ export function Lightbox({ list, index, item, onIndex, onClose, readOnly }: { li
   return createPortal(
     <div
       className="fade fixed inset-0 z-[70] flex flex-col bg-[#0d0a07] text-white"
-      onTouchStart={(e) => { touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+      onTouchStart={(e) => { touch.current = e.target instanceof HTMLTextAreaElement ? null : { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
       onTouchEnd={(e) => {
         if (!touch.current) return
         const dx = e.changedTouches[0].clientX - touch.current.x
@@ -177,6 +180,7 @@ export function Lightbox({ list, index, item, onIndex, onClose, readOnly }: { li
         {index > 0 && <button aria-label="Previous" onClick={prev} className="absolute left-3 hidden h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 sm:flex"><ChevronLeft /></button>}
         {index < list.length - 1 && <button aria-label="Next" onClick={next} className="absolute right-3 hidden h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 sm:flex"><ChevronRight /></button>}
       </div>
+      <MediaNote key={m.id} media={m} />
       {readOnly ? (
         <div className="flex items-center justify-center gap-2 px-3 py-3 safe-bottom">
           {url && <LbButton label={t('gallery.download')} onClick={() => window.open(url, '_blank', 'noopener')}><ExternalLink size={16} /></LbButton>}
@@ -211,6 +215,82 @@ export function Lightbox({ list, index, item, onIndex, onClose, readOnly }: { li
       )}
     </div>,
     document.body,
+  )
+}
+
+/** Small "has a note" marker for media tiles. */
+export function NoteBadge() {
+  return (
+    <span className="absolute bottom-1.5 left-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#2a2017]/70 text-white" title={t('note.has')} aria-label={t('note.has')}>
+      <MessageSquareText size={13} />
+    </span>
+  )
+}
+
+/**
+ * The note / caption of a photo or video, under the picture in the lightbox: two lines (tap to expand),
+ * an "Add note" button, and an editor that saves as you type (through the offline queue).
+ */
+export function MediaNote({ media, editable = true }: { media: Media; editable?: boolean }) {
+  const [editing, setEditing] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [v, setV] = useState(media.note ?? '')
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const latest = useRef({ v: media.note ?? '', saved: media.note ?? '' })
+  const save = (nv: string) => {
+    clearTimeout(timer.current)
+    if (nv.trim() === (latest.current.saved ?? '').trim()) return
+    latest.current.saved = nv
+    void updateMedia(media.id, { note: nv.trim() ? nv : null })
+  }
+  useEffect(() => () => { clearTimeout(timer.current); save(latest.current.v) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const note = editing ? v : media.note ?? ''
+  if (editing) {
+    return (
+      <div className="px-4 pb-1">
+        <textarea
+          autoFocus
+          dir="auto"
+          value={v}
+          rows={3}
+          placeholder={t('note.placeholder')}
+          onChange={(e) => {
+            const nv = e.target.value
+            setV(nv)
+            latest.current.v = nv
+            clearTimeout(timer.current)
+            timer.current = setTimeout(() => save(nv), 700)
+          }}
+          onBlur={() => save(latest.current.v)}
+          className="block max-h-40 w-full resize-none rounded-2xl border border-white/20 bg-white/10 p-3 text-[15px] leading-relaxed text-white outline-none placeholder:text-white/45 focus:border-white/40"
+        />
+        <div className="mt-2 flex justify-end">
+          <button onClick={() => { save(latest.current.v); setEditing(false) }} className="h-8 rounded-full bg-white px-4 text-sm font-medium text-[#2a2017]">{t('common.done')}</button>
+        </div>
+      </div>
+    )
+  }
+  if (!note.trim()) {
+    if (!editable) return null
+    return (
+      <div className="flex justify-center px-4">
+        <button onClick={() => { setV(''); latest.current.v = ''; setEditing(true) }} className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-sm text-white/70 hover:bg-white/10 hover:text-white">
+          <Plus size={15} /> {t('note.add')}
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className="flex items-start gap-2 px-4">
+      <button onClick={() => setOpen(!open)} className="min-w-0 flex-1 text-left" aria-expanded={open}>
+        <p dir="auto" className={cx('whitespace-pre-line text-[15px] leading-snug text-white/90', !open && 'line-clamp-2')}>{note}</p>
+      </button>
+      {editable && (
+        <button onClick={() => { setV(note); latest.current.v = note; setEditing(true) }} aria-label={t('note.edit')} title={t('note.edit')} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/70 hover:bg-white/10 hover:text-white">
+          <Pencil size={15} />
+        </button>
+      )}
+    </div>
   )
 }
 

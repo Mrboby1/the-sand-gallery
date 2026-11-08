@@ -5,7 +5,8 @@ import type { Item, Media } from '../lib/types'
 import { useApp, childrenOf } from '../store/app'
 import { useCoverFor, useMediaUrl, useTotals } from '../lib/hooks'
 import { fmtDuration } from '../lib/time'
-import { Lightbox } from './MediaGrid'
+import { Lightbox, NoteBadge } from './MediaGrid'
+import { NotesTab } from './Tabs'
 import { ItemPress } from './ItemMenu'
 import { Thumb } from './Tile'
 import { cx } from './ui'
@@ -48,6 +49,7 @@ function MasonryTile({ m, onOpen, alt }: { m: Media; onOpen: () => void; alt: st
     <button onClick={onOpen} aria-label={alt} className="group relative mb-2 block w-full overflow-hidden rounded-xl bg-surface-2 sm:mb-3" style={{ aspectRatio: ratio }}>
       {url && <img src={url} alt={alt} loading="lazy" decoding="async" className="fade absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:opacity-90" />}
       {m.kind === 'video' && <span className="absolute inset-0 m-auto flex h-11 w-11 items-center justify-center rounded-full bg-[#2a2017]/60 text-white"><Play size={18} fill="white" /></span>}
+      {m.note && <NoteBadge />}
     </button>
   )
 }
@@ -59,15 +61,13 @@ export function FinishedView({ item }: { item: Item }) {
   const totals = useTotals()
   const covers = useCoverFor()
   const [open, setOpen] = useState<number | null>(null)
-  const [more, setMore] = useState(false)
+  const [tab, setTab] = useState<'gallery' | 'notes'>('gallery')
   const kids = useMemo(() => childrenOf(items, item.id), [items, item.id])
   // finished pieces first, then the process shots; oldest first within each
   const media = useMemo(
     () => allMedia.filter((m) => m.item_id === item.id).sort((a, b) => (a.phase === b.phase ? a.created_at.localeCompare(b.created_at) : a.phase === 'finished' ? -1 : 1)),
     [allMedia, item.id],
   )
-  const notes = item.notes.trim()
-  const long = notes.length > 280
   const line = finishedLine(item, totals.total(item.id))
 
   return (
@@ -75,13 +75,24 @@ export function FinishedView({ item }: { item: Item }) {
       <header className="pb-6 pt-2 text-center sm:pt-6">
         <h1 dir="auto" className="font-display text-[34px] font-semibold leading-tight [overflow-wrap:anywhere] sm:text-5xl">{item.title}</h1>
         {line && <p className="mt-2 text-[13px] text-muted">{line}</p>}
-        {notes && (
-          <div className="mx-auto mt-5 max-w-xl text-[16px] leading-relaxed text-ink/85">
-            <p dir="auto" className="whitespace-pre-line">{long && !more ? notes.slice(0, 280).trimEnd() + '…' : notes}</p>
-            {long && <button onClick={() => setMore(!more)} className="mt-1 text-[13px] font-medium text-accent-strong">{more ? t('gallery.less') : t('gallery.more')}</button>}
-          </div>
-        )}
+        {/* two light tabs: the pictures, and the item's notes */}
+        <div className="mt-5 inline-flex rounded-full bg-surface-2 p-1" role="tablist">
+          {(['gallery', 'notes'] as const).map((tb) => (
+            <button
+              key={tb}
+              role="tab"
+              aria-selected={tab === tb}
+              onClick={() => setTab(tb)}
+              className={cx('h-8 rounded-full px-4 text-[14px] transition', tab === tb ? 'bg-surface font-medium text-ink shadow-sm' : 'text-muted')}
+            >
+              {t(tb === 'gallery' ? 'tabs.gallery' : 'tabs.notes')}
+            </button>
+          ))}
+        </div>
       </header>
+
+      {tab === 'notes' && <div className="mx-auto max-w-2xl"><NotesTab item={item} /></div>}
+      {tab === 'gallery' && <>
 
       {kids.length > 0 && (
         <div className="mb-8 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
@@ -97,6 +108,7 @@ export function FinishedView({ item }: { item: Item }) {
         <p className="py-12 text-center text-muted">{t('gallery.empty')}</p>
       )}
 
+      </>}
       {open !== null && media[open] && <Lightbox list={media} index={open} item={item} onIndex={setOpen} onClose={() => setOpen(null)} readOnly />}
     </div>
   )

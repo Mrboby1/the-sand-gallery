@@ -161,7 +161,7 @@ export const en = {
   'tags.clear': 'Clear',
   'tags.none': 'No tags yet',
 
-  'search.placeholder': 'Search items, notes, tags…',
+  'search.placeholder': 'Search projects, notes, photo notes, tags…',
   'search.empty': 'Nothing matches.',
   'search.hint': 'Type to search, or pick a tag.',
 
@@ -264,6 +264,11 @@ export const en = {
   'menu.deleteBody': 'Delete "{title}" and everything inside it? You can undo for a few seconds.',
   'item.deleted': 'Deleted "{title}"',
   'common.undo': 'Undo',
+
+  'note.add': 'Add note',
+  'note.edit': 'Edit note',
+  'note.has': 'Has a note',
+  'note.placeholder': 'A note for this photo or video…',
 
   'common.save': 'Save',
   'common.cancel': 'Cancel',

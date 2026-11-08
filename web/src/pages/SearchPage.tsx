@@ -12,6 +12,7 @@ import { t } from '../i18n'
 
 export function SearchPage() {
   const items = useApp((s) => s.data.items)
+  const media = useApp((s) => s.data.media)
   const statuses = useApp((s) => s.data.statuses)
   const [q, setQ] = useState('')
   const [tags, setTags] = useState<string[]>([])
@@ -22,16 +23,17 @@ export function SearchPage() {
   const results = useMemo(() => {
     const needle = q.trim().toLowerCase()
     if (!needle && !tags.length && !status) return []
+    const noteHits = new Set(needle ? media.filter((m) => m.note?.toLowerCase().includes(needle)).map((m) => m.item_id) : [])
     return items
       .filter((i) => tags.every((tg) => i.tags.includes(tg)))
       .filter((i) => !status || i.status_id === status)
-      .filter((i) => !needle || i.title.toLowerCase().includes(needle) || i.notes.toLowerCase().includes(needle) || i.tags.some((tg) => tg.includes(needle.replace(/^#/, ''))))
+      .filter((i) => !needle || i.title.toLowerCase().includes(needle) || i.notes.toLowerCase().includes(needle) || noteHits.has(i.id) || i.tags.some((tg) => tg.includes(needle.replace(/^#/, ''))))
       .sort((a, b) => {
         const at = a.title.toLowerCase().includes(needle) ? 0 : 1
         const bt = b.title.toLowerCase().includes(needle) ? 0 : 1
         return at - bt || b.updated_at.localeCompare(a.updated_at)
       })
-  }, [items, q, tags, status])
+  }, [items, media, q, tags, status])
   const pathOf = (it: { parent_id: string | null }) => {
     const parts: string[] = []
     let p = it.parent_id ? byId.get(it.parent_id) : undefined

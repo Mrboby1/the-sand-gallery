@@ -85,10 +85,13 @@ export function SharePage() {
         {view.media.length > 0 && (
           <div className="columns-2 gap-2 sm:columns-3 lg:columns-4">
             {view.media.map((m, i) => (
-              <button key={m.id} onClick={() => setOpen({ list: view.media, i })} className="relative mb-2 block w-full overflow-hidden rounded-xl bg-surface-2">
-                <img src={m.thumb_url ?? m.url} alt="" loading="lazy" className="block w-full" style={m.width && m.height ? { aspectRatio: `${m.width}/${m.height}` } : undefined} />
-                {m.kind === 'video' && <span className="absolute inset-0 m-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white"><Play size={18} fill="white" /></span>}
-              </button>
+              <figure key={m.id} className="mb-3 break-inside-avoid">
+                <button onClick={() => setOpen({ list: view.media, i })} className="relative block w-full overflow-hidden rounded-xl bg-surface-2">
+                  <img src={m.thumb_url ?? m.url} alt={m.note ?? ''} loading="lazy" className="block w-full" style={m.width && m.height ? { aspectRatio: `${m.width}/${m.height}` } : undefined} />
+                  {m.kind === 'video' && <span className="absolute inset-0 m-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white"><Play size={18} fill="white" /></span>}
+                </button>
+                {m.note && <figcaption dir="auto" className="mt-1.5 line-clamp-3 px-0.5 text-[13px] leading-snug text-muted">{m.note}</figcaption>}
+              </figure>
             ))}
           </div>
         )}
@@ -112,7 +115,10 @@ function ShareLightbox({ list, index, onIndex, onClose }: { list: SMedia[]; inde
   return (
     <div className="fade fixed inset-0 z-50 flex items-center justify-center bg-[#0d0a07]">
       <button aria-label={t('common.close')} onClick={onClose} className="absolute right-4 top-[calc(1rem+env(safe-area-inset-top))] z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white"><X /></button>
-      {m.kind === 'video' ? <video key={m.id} src={m.url} poster={m.thumb_url ?? undefined} controls autoPlay playsInline className="max-h-full max-w-full" /> : <img key={m.id} src={m.url} alt="" className="fade max-h-full max-w-full object-contain" />}
+      <div className="flex max-h-full w-full flex-col items-center justify-center gap-3">
+        {m.kind === 'video' ? <video key={m.id} src={m.url} poster={m.thumb_url ?? undefined} controls autoPlay playsInline className="max-h-[80vh] max-w-full" /> : <img key={m.id} src={m.url} alt={m.note ?? ''} className="fade max-h-[80vh] max-w-full object-contain" />}
+        {m.note && <p dir="auto" className="max-w-xl whitespace-pre-line px-5 text-center text-[15px] leading-snug text-white/90">{m.note}</p>}
+      </div>
       <button aria-label="Previous" disabled={index === 0} onClick={() => onIndex(index - 1)} className={cx('absolute left-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white', index === 0 && 'opacity-0')}><ChevronLeft /></button>
       <button aria-label="Next" disabled={index === list.length - 1} onClick={() => onIndex(index + 1)} className={cx('absolute right-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white', index === list.length - 1 && 'opacity-0')}><ChevronRight /></button>
     </div>
