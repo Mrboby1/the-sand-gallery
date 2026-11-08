@@ -57,7 +57,7 @@ export interface Backend {
   fetchShared(token: string): Promise<SharedGallery | null>
 
   /** Web Push: register this device; returns the per-device secret used by the notification's Stop button. */
-  pushSubscribe(sub: PushSubscriptionJSON): Promise<{ deviceId: string; deviceSecret: string }>
+  pushSubscribe(sub: PushSubscriptionJSON, deviceKey: string): Promise<{ deviceId: string; deviceSecret: string }>
   pushUnsubscribe(endpoint: string): Promise<void>
   /** Sends a test notification to all of this user's devices; returns how many accepted it. */
   pushTest(): Promise<number>

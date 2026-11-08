@@ -25,8 +25,30 @@ function keyBytes(b64url: string): Uint8Array {
   return Uint8Array.from(s, (c) => c.charCodeAt(0))
 }
 
-/** Subscribes this browser to Web Push and registers it with the Worker (once per subscription). */
-export async function ensurePush(): Promise<boolean> {
+/** Bump to make every device register once more (e.g. to send fields older versions did not). */
+const REG_VERSION = 2
+let registering: Promise<boolean> | null = null
+
+/** A random id for this device/browser, kept in IndexedDB: lets the server keep one row per device. */
+async function deviceKey(): Promise<string> {
+  let k = await kvGet<string>('deviceKey')
+  if (!k) {
+    k = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(18)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    await kvSet('deviceKey', k)
+  }
+  return k
+}
+
+/**
+ * Subscribes this browser to Web Push and registers it with the Worker. Single-flight: several parts of
+ * the app may ask at the same moment (that used to create two subscriptions for one phone).
+ */
+export function ensurePush(): Promise<boolean> {
+  if (!registering) registering = doEnsurePush().finally(() => { registering = null })
+  return registering
+}
+
+async function doEnsurePush(): Promise<boolean> {
   if (!pushSupported() || Notification.permission !== 'granted' || backend.mode !== 'cloud' || !CLOUD) return false
   try {
     const reg = await navigator.serviceWorker.ready
@@ -35,10 +57,10 @@ export async function ensurePush(): Promise<boolean> {
       const { publicKey } = (await (await fetch(`${CLOUD.workerUrl}/api/push/key`)).json()) as { publicKey: string }
       sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) as BufferSource })
     }
-    const known = await kvGet<DeviceInfo>('device')
-    if (known && known.endpoint === sub.endpoint) return true
-    const res = await backend.pushSubscribe(sub.toJSON())
-    await kvSet('device', { ...res, workerUrl: CLOUD.workerUrl, endpoint: sub.endpoint } satisfies DeviceInfo)
+    const known = await kvGet<DeviceInfo & { v?: number }>('device')
+    if (known && known.endpoint === sub.endpoint && known.v === REG_VERSION) return true
+    const res = await backend.pushSubscribe(sub.toJSON(), await deviceKey())
+    await kvSet('device', { ...res, workerUrl: CLOUD.workerUrl, endpoint: sub.endpoint, v: REG_VERSION })
     return true
   } catch (e) {
     console.warn('push registration failed', e)

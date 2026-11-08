@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 
 export type ThemePref = 'system' | 'light' | 'dark'
 /** Visual style: 'flat' (default, clean) or 'glossy' (the original 3D look: gradients, shine, shadows). */
-export type StylePref = 'flat' | 'glossy'
+export type StylePref = 'flat' | 'glossy' | 'line'
 
 export function getTheme(): ThemePref {
   try { return (localStorage.getItem('sg.theme') as ThemePref) || 'system' } catch { return 'system' }
@@ -26,7 +26,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => appl
 const styleListeners = new Set<() => void>()
 
 export function getStyle(): StylePref {
-  try { return localStorage.getItem('sg.style') === 'glossy' ? 'glossy' : 'flat' } catch { return 'flat' }
+  try { const v = localStorage.getItem('sg.style'); return v === 'glossy' || v === 'line' ? v : 'flat' } catch { return 'flat' }
 }
 
 export function setStyle(s: StylePref) {

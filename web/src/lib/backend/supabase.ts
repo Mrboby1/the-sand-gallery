@@ -215,8 +215,8 @@ export class SupabaseBackend implements Backend {
     return (await res.json()) as SharedGallery
   }
 
-  async pushSubscribe(sub: PushSubscriptionJSON) {
-    return this.api<{ deviceId: string; deviceSecret: string }>('/api/push/subscribe', { method: 'POST', body: JSON.stringify({ ...sub, userAgent: navigator.userAgent }) })
+  async pushSubscribe(sub: PushSubscriptionJSON, deviceKey: string) {
+    return this.api<{ deviceId: string; deviceSecret: string }>('/api/push/subscribe', { method: 'POST', body: JSON.stringify({ ...sub, userAgent: navigator.userAgent, deviceKey }) })
   }
   async pushUnsubscribe(endpoint: string) {
     await this.api('/api/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) })

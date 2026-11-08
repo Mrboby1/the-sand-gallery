@@ -102,6 +102,10 @@ body {
   --glass-line: #c9a77e;
   --rim: #c08a52;
 }
+/* 2D hourglass style: darker, muted lines and sand (the rest of the app looks like Flat) */
+:root { --hg2-wall: #3b342d; --hg2-sand: #a8792e; }
+[data-theme="dark"] { --hg2-wall: #b8ad9e; --hg2-sand: #c2924a; }
+
 .gloss-only { display: none; }
 [data-style="glossy"] .gloss-only { display: revert; }
 [data-style="glossy"] .flat-only { display: none; }

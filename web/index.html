@@ -14,7 +14,7 @@
         var t = localStorage.getItem('sg.theme') || 'system';
         var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
         document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-        document.documentElement.dataset.style = localStorage.getItem('sg.style') === 'glossy' ? 'glossy' : 'flat';
+        var st = localStorage.getItem('sg.style'); document.documentElement.dataset.style = st === 'glossy' || st === 'line' ? st : 'flat';
       } catch (e) {}
     </script>
   </head>

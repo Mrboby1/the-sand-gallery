@@ -379,16 +379,25 @@ async function pushToUser(env: Env, ownerId: string, data: unknown, opts: { topi
 
 async function pushSubscribe(env: Env, req: Request) {
   const user = await requireUser(env, req)
-  const b = (await req.json()) as { endpoint?: string; keys?: { p256dh?: string; auth?: string }; userAgent?: string }
+  const b = (await req.json()) as { endpoint?: string; keys?: { p256dh?: string; auth?: string }; userAgent?: string; deviceKey?: string }
   if (!b.endpoint || !/^https:\/\//.test(b.endpoint) || b.endpoint.length > 1000 || !b.keys?.p256dh || !b.keys?.auth) throw new HttpError(400, 'bad subscription')
+  const deviceKey = typeof b.deviceKey === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(b.deviceKey) ? b.deviceKey : null
+  const ua = (b.userAgent ?? '').slice(0, 200)
   const secret = b64urlEncode(crypto.getRandomValues(new Uint8Array(32)))
   const res = await service(env, 'push_subscriptions?on_conflict=endpoint', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
-    body: JSON.stringify({ owner_id: user.id, endpoint: b.endpoint, p256dh: b.keys.p256dh, auth: b.keys.auth, device_secret_hash: await sha256(secret), user_agent: (b.userAgent ?? '').slice(0, 200) }),
+    body: JSON.stringify({ owner_id: user.id, endpoint: b.endpoint, p256dh: b.keys.p256dh, auth: b.keys.auth, device_secret_hash: await sha256(secret), user_agent: ua, device_key: deviceKey }),
   })
   if (!res.ok) throw new HttpError(502, `db ${res.status}`)
   const [row] = (await res.json()) as { id: string }[]
+  // One row per device: drop this device's older registrations (same device key), and rows from before
+  // device keys existed that came from the same browser (same user agent, no key).
+  if (deviceKey) {
+    const ep = encodeURIComponent(b.endpoint)
+    await service(env, `push_subscriptions?owner_id=eq.${user.id}&device_key=eq.${encodeURIComponent(deviceKey)}&endpoint=neq.${ep}`, { method: 'DELETE' })
+    if (ua) await service(env, `push_subscriptions?owner_id=eq.${user.id}&device_key=is.null&user_agent=eq.${encodeURIComponent(ua)}&endpoint=neq.${ep}`, { method: 'DELETE' })
+  }
   return { deviceId: row.id, deviceSecret: secret }
 }
 

@@ -124,7 +124,7 @@ export function SettingsPage() {
             </span>
             <Segmented
               value={style}
-              options={(['flat', 'glossy'] as StylePref[]).map((v) => ({ v, l: t(`settings.style.${v}`) }))}
+              options={(['flat', 'glossy', 'line'] as StylePref[]).map((v) => ({ v, l: t(`settings.style.${v}`) }))}
               onChange={(v) => setStyle(v as StylePref)}
             />
           </div>

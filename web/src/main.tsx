@@ -1,12 +1,12 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { registerSW } from 'virtual:pwa-register'
 import './styles/index.css'
 import { applyTheme } from './lib/theme'
 import App from './App'
+import { setupUpdates } from './lib/updates'
 
 applyTheme()
-if (!location.pathname.startsWith('/s/')) registerSW({ immediate: true })
+if (!location.pathname.startsWith('/s/')) setupUpdates()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

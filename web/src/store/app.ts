@@ -59,10 +59,10 @@ const set = useApp.setState
 
 // ---------------------------------------------------------------- toasts
 let toastSeq = 1
-export function toast(text: string, tone: Toast['tone'] = 'info', action?: Toast['action']) {
+export function toast(text: string, tone: Toast['tone'] = 'info', action?: Toast['action'], ms?: number) {
   const id = toastSeq++
   set((s) => ({ toasts: [...s.toasts, { id, text, tone, action }] }))
-  setTimeout(() => dismissToast(id), tone === 'error' ? 7000 : action ? 5000 : 3200)
+  setTimeout(() => dismissToast(id), ms ?? (tone === 'error' ? 7000 : action ? 5000 : 3200))
 }
 export function dismissToast(id: number) {
   set((s) => ({ toasts: s.toasts.filter((x) => x.id !== id) }))

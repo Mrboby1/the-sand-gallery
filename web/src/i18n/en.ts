@@ -192,9 +192,10 @@ export const en = {
   'settings.color': 'Colour',
   'settings.customColor': 'Custom',
   'settings.style': 'Style',
-  'settings.styleHint': 'Flat and clean, or glossy 3D.',
+  'settings.styleHint': 'Flat and clean, glossy 3D, or a 2D line hourglass.',
   'settings.style.flat': 'Flat',
   'settings.style.glossy': 'Glossy',
+  'settings.style.line': '2D',
   'settings.templates': 'Templates',
   'settings.templatesHint': 'One subtask per line. Indent with two spaces to nest.',
   'settings.addTemplate': 'New template',
@@ -296,6 +297,9 @@ export const en = {
   'notif.state.denied': 'Blocked on this device: allow notifications for this site in the browser or Android settings.',
   'notif.state.unsupported': 'This browser cannot show notifications.',
   'notif.allowHere': 'Allow on this device',
+
+  'update.ready': 'A new version of the app is ready.',
+  'update.now': 'Update',
 
   'common.save': 'Save',
   'common.cancel': 'Cancel',

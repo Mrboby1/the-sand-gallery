@@ -84,6 +84,17 @@ deletes whatever was stored and shows Retry/Remove on the tile.
 Vars live in `worker/wrangler.toml`; secrets (`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ACCESS_TOKEN`,
 `B2_APPLICATION_KEY`) are Worker secrets only.
 
+### Updates of the installed app
+`src/lib/updates.ts`: the service worker is checked for a new version every 30 min and whenever the app comes back
+to the foreground (an installed Android app is often only resumed, never reopened). A new worker takes over at once
+(`skipWaiting` + `clients.claim` in `src/sw.ts`); the page then reloads by itself if it is in the background, or shows
+"A new version of the app is ready · Update" and reloads the next time it is put away.
+
+### Hourglass styles
+Settings > Appearance > Style: Flat (default), Glossy (3D) and 2D (Gabi's sketch: two bare walls, no caps, darker
+muted colours; `Hourglass2D` in `src/components/Hourglass.tsx`). All keep the same grains: fading in above the
+glass, fading out below it, frozen when paused.
+
 ### Wake-up
 Free Supabase projects pause after 7 idle days (the daily cron should prevent it). If the app cannot reach the DB it
 asks the Worker; a paused project shows the banner "Your gallery is asleep 💤 Wake up", which calls `/api/wake` and
@@ -139,4 +150,6 @@ automated logins. Email sign-in is **turned off** now (Google-only). To test aga
 and turn it off again.
 
 ## Rules
-No git push. Secrets never printed/committed. Backblaze: only bucket `sand-gallery-ypghnj`, only `sand-gallery/` keys.
+Code lives in the PRIVATE repo https://github.com/Mrboby1/the-sand-gallery: push `main` after each commit, never
+force-push, never make it public. Secrets never printed/committed (the Supabase anon key and the VAPID public key
+are public by design; anything from `infra/get-secret.ps1` never). Backblaze: only bucket `sand-gallery-ypghnj`, only `sand-gallery/` keys.

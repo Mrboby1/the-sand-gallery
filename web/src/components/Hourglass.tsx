@@ -1,4 +1,5 @@
 import { useId } from 'react'
+import { useStyle } from '../lib/theme'
 
 /**
  * The Sand Gallery hourglass: open at BOTH ends, so it is clearly bottomless. Sand pours in from
@@ -22,7 +23,7 @@ function rng(seed: number) {
  * Grains pouring in above the top opening: a nearly straight line with a little jitter, evenly spaced in
  * time (negative delays spread them along the path from the first frame).
  */
-function makeIncoming(n: number, rMin: number, rMax: number, seed: number, top: number): Grain[] {
+function makeIncoming(n: number, rMin: number, rMax: number, seed: number, top: number, endY = 48): Grain[] {
   const r = rng(seed)
   const d = 1.25
   return Array.from({ length: n }, (_, i) => ({
@@ -31,7 +32,7 @@ function makeIncoming(n: number, rMin: number, rMax: number, seed: number, top: 
     delay: -((i + r() * 0.35) / n) * d,
     r: rMin + r() * (rMax - rMin),
     dx: (r() - 0.5) * 1.2,
-    dy: 48 - (top + 2),
+    dy: endY - (top + 2),
   }))
 }
 
@@ -53,6 +54,55 @@ const INCOMING_FULL = makeIncoming(16, 0.7, 1.15, 7, -38)
 const OUTGOING_FULL = makeOutgoing(30, 0.65, 1.1, 11, 238 - 38 - 2 - 82, 16)
 const INCOMING_LITE = makeIncoming(3, 2, 2.4, 3, 0)
 const OUTGOING_LITE = makeOutgoing(4, 2, 2.4, 5, 158 - 82, 5)
+// 2D style: grains land on the top of the sand mound (higher than the funnel of the other styles)
+const INCOMING_2D_FULL = makeIncoming(16, 0.7, 1.15, 7, -38, 40)
+const INCOMING_2D_LITE = makeIncoming(3, 2, 2.4, 3, 0, 40)
+
+/**
+ * "2D" style (Gabi's sketch): just two walls that pinch at the neck, no top or bottom cap, a flat sand
+ * mound in the upper half, darker muted colours. Same grains: fading in above, fading out below.
+ */
+function Hourglass2D({ running, size, className, title, detail }: { running: boolean; size: number; className: string; title?: string; detail: 'full' | 'lite' }) {
+  const uid = useId().replace(/[:«»]/g, '')
+  const clip = `hg2-clip-${uid}`
+  const full = detail === 'full'
+  const top = full ? -38 : 0
+  const height = full ? 238 : 160
+  const incoming = full ? INCOMING_2D_FULL : INCOMING_2D_LITE
+  const outgoing = full ? OUTGOING_FULL : OUTGOING_LITE
+  const leftWall = 'M 30 14 L 30 44 C 30 64 55 69 56.5 80 C 55 91 30 96 30 116 L 30 146'
+  const rightWall = 'M 90 14 L 90 44 C 90 64 65 69 63.5 80 C 65 91 90 96 90 116 L 90 146'
+  const inside = 'M 30 14 L 30 44 C 30 64 55 69 56.5 80 C 55 91 30 96 30 116 L 30 146 L 90 146 L 90 116 C 90 96 65 91 63.5 80 C 65 69 90 64 90 44 L 90 14 Z'
+  const sw = full ? 3.6 : 6
+  return (
+    <svg
+      viewBox={`0 ${top} 120 ${height}`}
+      width={size}
+      height={(size * height) / 120}
+      className={`hg ${running ? 'running' : 'paused'} ${className}`}
+      role="img"
+      aria-label={title ?? (running ? 'Timer running' : 'Timer paused')}
+      overflow="visible"
+    >
+      <defs><clipPath id={clip}><path d={inside} /></clipPath></defs>
+      {/* the sand mound in the upper half, flat colour */}
+      <g clipPath={`url(#${clip})`}>
+        <path className="surface" d="M 0 54 Q 60 24 120 54 L 120 84 L 0 84 Z" fill="var(--hg2-sand)" />
+      </g>
+      {incoming.map((g, i) => (
+        <circle key={`i${i}`} className="grain in" cx={g.x} cy={top + 2} r={g.r} fill="var(--hg2-sand)"
+          style={{ ['--d' as string]: `${g.d}s`, ['--delay' as string]: `${g.delay}s`, ['--dy' as string]: `${g.dy}px`, ['--dx' as string]: `${g.dx}px` }} />
+      ))}
+      {outgoing.map((g, i) => (
+        <circle key={`o${i}`} className="grain" cx={g.x} cy={82} r={g.r} fill="var(--hg2-sand)"
+          style={{ ['--d' as string]: `${g.d}s`, ['--delay' as string]: `${g.delay}s`, ['--dy' as string]: `${g.dy}px`, ['--dx' as string]: `${g.dx}px` }} />
+      ))}
+      {/* two bare walls: open at the top and at the bottom */}
+      <path d={leftWall} fill="none" stroke="var(--hg2-wall)" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={rightWall} fill="none" stroke="var(--hg2-wall)" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 
 export function Hourglass({
   running = false,
@@ -68,6 +118,12 @@ export function Hourglass({
   title?: string
   detail?: 'full' | 'lite'
 }) {
+  const style = useStyle()
+  if (style === 'line') return <Hourglass2D running={running} size={size} className={className} title={title} detail={detail} />
+  return <HourglassClassic running={running} size={size} className={className} title={title} detail={detail} />
+}
+
+function HourglassClassic({ running, size, className, title, detail }: { running: boolean; size: number; className: string; title?: string; detail: 'full' | 'lite' }) {
   const uid = useId().replace(/[:«»]/g, '')
   const clip = `hg-clip-${uid}`
   const sand = `hg-sand-${uid}`
