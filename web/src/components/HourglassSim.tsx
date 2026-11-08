@@ -184,15 +184,20 @@ function Frost({ uid, interior, kind, size, h }: { uid: string; interior: string
   return (
     <svg viewBox={`0 ${TOP} 120 ${HEIGHT}`} width={size} height={h} className="frost absolute inset-0" aria-hidden overflow="visible">
       <defs>
-        <clipPath id={id('clip')}><path d={interior} /></clipPath>
+        <clipPath id={id('clip')}>
+          <path d={interior} />
+          {/* the openings inside the rims, so the ends are frosted too (classic / glossy) */}
+          {kind === 'classic' && <><ellipse cx="60" cy={glassTop} rx="34" ry="5.4" /><ellipse cx="60" cy={glassBottom} rx="34" ry="5.4" /></>}
+        </clipPath>
         <filter id={id('blur')} x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3.2" /></filter>
         {/* fine frosted grain, white speckles with alpha from noise */}
         <filter id={id('grain')} x="0" y="0" width="1" height="1">
-          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="5" />
-          <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 2.2 -1.05" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.35" numOctaves="2" seed="5" />
+          <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.4 -0.55" />
+          <feGaussianBlur stdDeviation="0.9" />
         </filter>
         {/* thicker toward the rims (top and bottom of the glass), thin in the middle */}
-        <linearGradient id={id('ends')} gradientUnits="userSpaceOnUse" x1="0" y1={glassTop} x2="0" y2={glassBottom}>
+        <linearGradient id={id('ends')} gradientUnits="userSpaceOnUse" x1="0" y1={glassTop - 7} x2="0" y2={glassBottom + 7}>
           <stop offset="0" stopColor="#fff" stopOpacity="0.85" />
           <stop offset="0.22" stopColor="#fff" stopOpacity="0" />
           <stop offset="0.78" stopColor="#fff" stopOpacity="0" />
@@ -201,16 +206,17 @@ function Frost({ uid, interior, kind, size, h }: { uid: string; interior: string
         {/* where the frost is: a soft band along the inside of the walls + the rim ends; clear in the centre */}
         <mask id={id('mask')} maskUnits="userSpaceOnUse" x="0" y={TOP} width="120" height={HEIGHT}>
           <path d={interior} fill="none" stroke="#fff" strokeWidth="15" filter={`url(#${id('blur')})`} />
-          <rect x="0" y={glassTop - 4} width="120" height={span + 8} fill={`url(#${id('ends')})`} />
+          <rect x="0" y={glassTop - 8} width="120" height={span + 16} fill={`url(#${id('ends')})`} />
         </mask>
       </defs>
       <g clipPath={`url(#${id('clip')})`}>
         <g mask={`url(#${id('mask')})`}>
-          <rect x="0" y={glassTop - 4} width="120" height={span + 8} fill={ice} opacity="0.62" />
-          <rect x="0" y={glassTop - 4} width="120" height={span + 8} filter={`url(#${id('grain')})`} opacity="0.7" />
+          <rect x="0" y={glassTop - 8} width="120" height={span + 16} fill={ice} opacity="0.6" />
+          <rect x="0" y={glassTop - 8} width="120" height={span + 16} fill="#fff" opacity="0.18" />
+          <rect x="0" y={glassTop - 8} width="120" height={span + 16} filter={`url(#${id('grain')})`} opacity="0.25" />
         </g>
         {/* a few small ice crystals on the frosted band */}
-        <g stroke="#fff" strokeOpacity="0.75" strokeWidth="0.45" strokeLinecap="round">
+        <g stroke="#fff" strokeOpacity="0.6" strokeWidth="0.4" strokeLinecap="round">
           {CRYSTALS[kind].map(([x, y, r], i) => (
             <g key={i} transform={`translate(${x + (x < 60 ? 2.5 : -2.5)} ${y}) rotate(${(i * 23) % 60})`}>
               <line x1={-r * 0.8} y1="0" x2={r * 0.8} y2="0" /><line x1={-r * 0.4} y1={-r * 0.7} x2={r * 0.4} y2={r * 0.7} /><line x1={-r * 0.4} y1={r * 0.7} x2={r * 0.4} y2={-r * 0.7} />
