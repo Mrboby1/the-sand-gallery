@@ -248,7 +248,7 @@ export function loadData(): Promise<void> {
   loading = (async () => {
     if (get().phase !== 'ready') set({ phase: 'loading' })
     try {
-      const data = await backend.loadAll()
+      const data = withoutPendingDeletes(await backend.loadAll())
       set({ data, phase: 'ready' })
       if (!unsubRemote) unsubRemote = backend.subscribe(() => scheduleRemoteReload())
     } catch (e) {
@@ -267,7 +267,7 @@ function scheduleRemoteReload() {
   const wait = Math.max(0, lastLocalWrite + 1500 - Date.now())
   setTimeout(() => {
     if (outbox.length || flushing || Date.now() - lastLocalWrite < 1500) return scheduleRemoteReload()
-    void backend.loadAll().then((data) => { if (!outbox.length) set({ data }) }).catch(() => {})
+    void backend.loadAll().then((data) => { if (!outbox.length) set({ data: withoutPendingDeletes(data) }) }).catch(() => {})
   }, wait)
 }
 
@@ -416,8 +416,7 @@ export function moveItem(id: string, newParent: string | null) {
   return updateItem(id, { parent_id: newParent, sort_order: nextSort(d.items, newParent) })
 }
 
-export async function deleteItem(id: string) {
-  const d = get().data
+export async function deleteItem(id: string, d: Snapshot = get().data) {
   const ids = new Set([id, ...descendantIds(d.items, id)])
   const media = d.media.filter((m) => ids.has(m.item_id))
   const running = d.sessions.find((s) => !s.ended_at && ids.has(s.item_id))
@@ -435,6 +434,36 @@ export async function deleteItem(id: string) {
     }),
     [{ k: 'remove', table: 'items', ids: [id] }, ...(keys.length ? [{ k: 'objects', keys } as Op] : [])],
   )
+}
+
+/** Items hidden by a delete that can still be undone (kept out of server reloads meanwhile). */
+const pendingDeletes = new Set<string>()
+export const withoutPendingDeletes = (data: Snapshot): Snapshot =>
+  pendingDeletes.size ? { ...data, items: data.items.filter((i) => !pendingDeletes.has(i.id)) } : data
+
+/** Hides the item (and its subtasks) at once and offers Undo for a few seconds before really deleting. */
+export function deleteWithUndo(id: string) {
+  const d0 = get().data
+  const it = d0.items.find((i) => i.id === id)
+  if (!it) return
+  const ids = new Set([id, ...descendantIds(d0.items, id)])
+  if (d0.sessions.some((s) => !s.ended_at && ids.has(s.item_id))) void stopTimer()
+  const snapshot = get().data
+  ids.forEach((x) => pendingDeletes.add(x))
+  set((s) => ({ data: withoutPendingDeletes(s.data) }))
+  let undone = false
+  toast(t('item.deleted', { title: it.title }), 'info', {
+    label: t('common.undo'),
+    run: () => {
+      undone = true
+      ids.forEach((x) => pendingDeletes.delete(x))
+      set((s) => ({ data: { ...s.data, items: [...s.data.items, ...snapshot.items.filter((i) => ids.has(i.id) && !s.data.items.some((x) => x.id === i.id))] } }))
+    },
+  })
+  setTimeout(() => {
+    if (undone) return
+    void deleteItem(id, snapshot).finally(() => ids.forEach((x) => pendingDeletes.delete(x)))
+  }, 5500)
 }
 
 export async function duplicateItem(id: string): Promise<string | null> {

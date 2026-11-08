@@ -9,6 +9,7 @@ import { SharePage } from './pages/SharePage'
 import { Login } from './pages/Login'
 import { Toasts, WakeLayer } from './components/Shell'
 import { RunningChip } from './components/Timer'
+import { ItemMenuHost } from './components/ItemMenu'
 import { DialogHost } from './components/ui'
 import { Hourglass } from './components/Hourglass'
 import { t } from './i18n'
@@ -54,6 +55,7 @@ function Gate() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <RunningChip />
+      <ItemMenuHost />
     </>
   )
 }

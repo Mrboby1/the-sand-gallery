@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import type { Item, Session } from '../lib/types'
 import {
@@ -58,7 +58,9 @@ export function TimeLogTab({ item, hasChildren }: { item: Item; hasChildren: boo
   const items = useApp((s) => s.data.items)
   const sessions = useApp((s) => s.data.sessions)
   const [includeSub, setIncludeSub] = useState(hasChildren)
-  const [editing, setEditing] = useState<Session | 'new' | null>(null)
+  const [params, setParams] = useSearchParams()
+  const [editing, setEditing] = useState<Session | 'new' | null>(() => (params.get('add') ? 'new' : null))
+  useEffect(() => { if (params.get('add')) { params.delete('add'); setParams(params, { replace: true }) } }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const running = useRunning()
   const now = useNow(!!running)
   const scope = useMemo(() => {

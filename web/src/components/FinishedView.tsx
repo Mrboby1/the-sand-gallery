@@ -6,6 +6,7 @@ import { useApp, childrenOf } from '../store/app'
 import { useCoverFor, useMediaUrl, useTotals } from '../lib/hooks'
 import { fmtDuration } from '../lib/time'
 import { Lightbox } from './MediaGrid'
+import { ItemPress } from './ItemMenu'
 import { Thumb } from './Tile'
 import { cx } from './ui'
 import { t, tn, locale } from '../i18n'
@@ -84,7 +85,7 @@ export function FinishedView({ item }: { item: Item }) {
 
       {kids.length > 0 && (
         <div className="mb-8 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
-          {kids.map((k) => <AlbumTile key={k.id} item={k} cover={covers.cover(k)} count={covers.countMedia(k.id)} />)}
+          {kids.map((k) => <ItemPress key={k.id} itemId={k.id}><AlbumTile item={k} cover={covers.cover(k)} count={covers.countMedia(k.id)} /></ItemPress>)}
         </div>
       )}
 

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FolderPlus, ImagePlus, LayoutTemplate, Plus } from 'lucide-react'
+import { ImagePlus, LayoutTemplate, ListPlus, Plus, SquarePlus } from 'lucide-react'
 import { useApp, createItem, toast, uploadFiles } from '../store/app'
 import { NewItemSheet } from './ItemBits'
 import { Button, Sheet, cx } from './ui'
@@ -12,10 +12,11 @@ function countNodes(n: { children?: unknown[] }[]): number {
 
 /**
  * The one obvious "+" of the app: a floating button on phones and a "New" button on desktop.
- * It offers: new folder / project, new from template, and (inside an item) upload photos/videos.
+ * At the top level it offers a new project, inside an item a new subtask; plus new from template and
+ * (inside an item) upload photos/videos.
  */
 export function AddMenu({ parentId, parentTitle, aboveBar = false, variant = 'both' }: { parentId: string | null; parentTitle?: string; aboveBar?: boolean; variant?: 'both' | 'fab' | 'button' }) {
-  const [sheet, setSheet] = useState<null | 'menu' | 'folder' | 'template'>(null)
+  const [sheet, setSheet] = useState<null | 'menu' | 'item' | 'template'>(null)
   const file = useRef<HTMLInputElement>(null)
   return (
     <>
@@ -50,14 +51,14 @@ export function AddMenu({ parentId, parentTitle, aboveBar = false, variant = 'bo
           else setSheet(what)
         }}
       />
-      <NewItemSheet open={sheet === 'folder'} onClose={() => setSheet(null)} parentId={parentId} stay={!!parentId} />
+      <NewItemSheet open={sheet === 'item'} onClose={() => setSheet(null)} parentId={parentId} stay={!!parentId} />
       {sheet === 'template' && <TemplatePickerSheet parentId={parentId} onClose={() => setSheet(null)} />}
     </>
   )
 }
 
 function AddSheet({ open, onClose, onPick, canUpload, parentTitle }: {
-  open: boolean; onClose: () => void; onPick: (w: 'folder' | 'template' | 'upload') => void; canUpload: boolean; parentTitle?: string
+  open: boolean; onClose: () => void; onPick: (w: 'item' | 'template' | 'upload') => void; canUpload: boolean; parentTitle?: string
 }) {
   const templates = useApp((s) => s.data.templates)
   const Opt = ({ icon, title, hint, onClick, disabled }: { icon: React.ReactNode; title: string; hint: string; onClick: () => void; disabled?: boolean }) => (
@@ -72,7 +73,9 @@ function AddSheet({ open, onClose, onPick, canUpload, parentTitle }: {
   return (
     <Sheet open={open} onClose={onClose} title={t('add.title')}>
       <div className="flex flex-col gap-1">
-        <Opt icon={<FolderPlus size={21} />} title={t('add.folder')} hint={t('add.folderHint')} onClick={() => onPick('folder')} />
+        {canUpload
+          ? <Opt icon={<ListPlus size={21} />} title={t('add.subtask')} hint={t('add.subtaskHint', { title: parentTitle ?? '' })} onClick={() => onPick('item')} />
+          : <Opt icon={<SquarePlus size={21} />} title={t('add.project')} hint={t('add.projectHint')} onClick={() => onPick('item')} />}
         <Opt icon={<LayoutTemplate size={21} />} title={t('add.template')} hint={templates.length ? t('add.templateHint') : t('settings.noTemplates')} onClick={() => onPick('template')} disabled={!templates.length} />
         {canUpload && <Opt icon={<ImagePlus size={21} />} title={t('add.upload')} hint={t('add.uploadHint', { title: parentTitle ?? '' })} onClick={() => onPick('upload')} />}
       </div>
@@ -80,7 +83,7 @@ function AddSheet({ open, onClose, onPick, canUpload, parentTitle }: {
   )
 }
 
-/** Picks a template and creates a NEW folder from it (inside parentId, or at the top level). */
+/** Picks a template and creates a NEW project or subtask from it (inside parentId, or at the top level). */
 export function TemplatePickerSheet({ parentId, onClose }: { parentId: string | null; onClose: () => void }) {
   const templates = useApp((s) => s.data.templates)
   const nav = useNavigate()

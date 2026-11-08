@@ -8,6 +8,7 @@ import type { Item, Status } from '../lib/types'
 import { useApp, updateItem } from '../store/app'
 import { useCoverFor, useIsFinished, useTotals } from '../lib/hooks'
 import { AlbumTile } from './FinishedView'
+import { ItemPress, openItemMenu, swallowNextClick } from './ItemMenu'
 import { fmtDuration, overlapMs, startOfWeek, ymd } from '../lib/time'
 import { ItemRow, ItemTile, Thumb } from './Tile'
 import { HourglassGlyph } from './Hourglass'
@@ -32,11 +33,13 @@ export function ItemsView({ items, view, scopeIds, pathOf, rootId }: { items: It
     return (
       <div className="flex flex-col gap-0.5">
         {items.map((it) => (
+          <ItemPress key={it.id} itemId={it.id} dots="row">
           <ItemRow
-            key={it.id} item={it} status={it.status_id ? statusById.get(it.status_id) : null} cover={covers.cover(it)}
+            item={it} status={it.status_id ? statusById.get(it.status_id) : null} cover={covers.cover(it)}
             total={totals.total(it.id)} ticking={totals.runningChain.has(it.id)} kids={covers.countKids(it.id)} showDue={showDue}
             path={pathOf?.(it)}
           />
+          </ItemPress>
         ))}
       </div>
     )
@@ -52,15 +55,15 @@ export function ItemsView({ items, view, scopeIds, pathOf, rootId }: { items: It
         size === 'l' && 'grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 sm:gap-x-5',
       )}
     >
-      {items.map((it) => isFinished(it.id) ? (
-        <AlbumTile key={it.id} item={it} size={size} cover={covers.cover(it)} count={covers.countMedia(it.id)} />
+      {items.map((it) => <ItemPress key={it.id} itemId={it.id}>{isFinished(it.id) ? (
+        <AlbumTile item={it} size={size} cover={covers.cover(it)} count={covers.countMedia(it.id)} />
       ) : (
         <ItemTile
-          key={it.id} item={it} size={size} status={it.status_id ? statusById.get(it.status_id) : null} cover={covers.cover(it)}
+          item={it} size={size} status={it.status_id ? statusById.get(it.status_id) : null} cover={covers.cover(it)}
           total={totals.total(it.id)} running={totals.runningItemId === it.id} ticking={totals.runningChain.has(it.id)}
           kids={covers.countKids(it.id)} mediaCount={covers.countMedia(it.id)} showDue={showDue}
         />
-      ))}
+      )}</ItemPress>)}
     </div>
   )
 }
@@ -69,7 +72,7 @@ export function ItemsView({ items, view, scopeIds, pathOf, rootId }: { items: It
 function Board({ items, statuses }: { items: Item[]; statuses: Status[] }) {
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 400, tolerance: 8 } }),
   )
   const [dragId, setDragId] = useState<string | null>(null)
   const cols = [...statuses].sort((a, b) => a.sort_order - b.sort_order)
@@ -77,6 +80,8 @@ function Board({ items, statuses }: { items: Item[]; statuses: Status[] }) {
   const onEnd = (e: DragEndEvent) => {
     setDragId(null)
     const id = String(e.active.id)
+    // a touch hold that never moved is a long-press: open the item's menu instead of dropping
+    if (Math.hypot(e.delta.x, e.delta.y) < 8) { swallowNextClick(true); openItemMenu(id); return }
     const col = e.over ? String(e.over.id) : null
     if (!col) return
     const statusId = col === '__none' ? null : col
@@ -85,7 +90,7 @@ function Board({ items, statuses }: { items: Item[]; statuses: Status[] }) {
   }
   const dragItem = items.find((i) => i.id === dragId)
   return (
-    <DndContext sensors={sensors} autoScroll={{ threshold: { x: 0.08, y: 0.12 }, acceleration: 4 }} onDragStart={(e) => setDragId(String(e.active.id))} onDragEnd={onEnd} onDragCancel={() => setDragId(null)}>
+    <DndContext sensors={sensors} autoScroll={{ threshold: { x: 0.08, y: 0.12 }, acceleration: 4 }} onDragStart={(e) => { setDragId(String(e.active.id)); if (typeof TouchEvent !== 'undefined' && e.activatorEvent instanceof TouchEvent) { try { navigator.vibrate?.(10) } catch { /* ignore */ } } }} onDragEnd={onEnd} onDragCancel={() => setDragId(null)}>
       <div className="no-scrollbar -mx-4 flex snap-x snap-mandatory items-start gap-3 overflow-x-auto px-4 pb-4 sm:mx-0 sm:px-0">
         {cols.map((s) => (
           <Column key={s.id} id={s.id} title={s.name} color={s.color} items={items.filter((i) => i.status_id === s.id)} />
@@ -128,7 +133,7 @@ function DraggableCard({ item }: { item: Item }) {
   const { setNodeRef, listeners, attributes, isDragging } = useDraggable({ id: item.id })
   return (
     <div ref={setNodeRef} {...listeners} {...attributes} className={cx('touch-manipulation', isDragging && 'opacity-30')}>
-      <Card item={item} />
+      <ItemPress itemId={item.id} longPress={false}><Card item={item} /></ItemPress>
     </div>
   )
 }

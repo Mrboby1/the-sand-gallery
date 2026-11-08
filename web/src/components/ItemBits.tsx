@@ -3,10 +3,20 @@ import { useNavigate } from 'react-router-dom'
 import { Check, ChevronRight, Copy, CornerDownRight, FilePlus2, Hash, Layers, Link2, Plus, X } from 'lucide-react'
 import type { Item } from '../lib/types'
 import {
-  useApp, childrenOf, createItem, createShare, descendantIds, moveItem, revokeShare, shareUrl, toast, updateItem,
+  useApp, childrenOf, createItem, createShare, descendantIds, moveItem, revokeShare, shareUrl, toast, updateItem, findTemplateByName, saveAsTemplate,
 } from '../store/app'
-import { Button, Input, Sheet, cx } from './ui'
+import { Button, Input, Sheet, confirmDialog, cx, promptDialog } from './ui'
 import { t } from '../i18n'
+
+// ---------------------------------------------------------------- templates
+/** Asks for a name (prefilled with the item title) and saves; a same-named template is replaced after a confirm. */
+export async function saveTemplateFlow(item: Item) {
+  const name = await promptDialog(t('item.saveTemplate'), item.title, t('common.save'))
+  if (!name) return
+  const dup = findTemplateByName(name)
+  if (dup && !(await confirmDialog(t('item.templateReplace', { name: dup.name }), { okLabel: t('item.templateReplaceOk') }))) return
+  await saveAsTemplate(item.id, name)
+}
 
 // ---------------------------------------------------------------- tags
 export function allTags(items: Item[]): string[] {
@@ -67,7 +77,7 @@ export function TagEditor({ item }: { item: Item }) {
 }
 
 // ---------------------------------------------------------------- new item
-/** New item dialog. `stay`: keep the current page (adding several sub-items) and offer Open in a toast. */
+/** New item dialog. `stay`: keep the current page (adding several subtasks) and offer Open in a toast. */
 export function NewItemSheet({ open, onClose, parentId, stay }: { open: boolean; onClose: () => void; parentId: string | null; stay?: boolean }) {
   const templates = useApp((s) => s.data.templates)
   const [title, setTitle] = useState('')

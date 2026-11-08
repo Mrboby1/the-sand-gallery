@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
-  CalendarDays, ChevronRight, Copy, FolderInput, FolderPlus, LayoutTemplate, Link2, MoreHorizontal, Pencil, Plus, Trash2, X,
+  CalendarDays, ChevronRight, Copy, FolderInput, ListPlus, LayoutTemplate, Link2, MoreHorizontal, Pencil, Plus, Trash2, X,
 } from 'lucide-react'
 import {
-  useApp, childrenOf, createItem, deleteItem, descendantIds, duplicateItem, findTemplateByName, saveAsTemplate, toast, updateItem,
+  useApp, childrenOf, createItem, deleteItem, descendantIds, duplicateItem, toast, updateItem,
 } from '../store/app'
 import { useIsFinished, useLocalPref, useTotals } from '../lib/hooks'
 import { FinishedView } from '../components/FinishedView'
@@ -16,8 +16,8 @@ import { ItemsView } from '../components/ItemsView'
 import { ViewSwitcher, type ViewMode } from '../components/ViewSwitcher'
 import { MediaSection } from '../components/MediaGrid'
 import { CostsTab, NotesTab, TimeLogTab } from '../components/Tabs'
-import { MoveSheet, NewItemSheet, ShareSheet, TagEditor } from '../components/ItemBits'
-import { Button, Empty, Menu, MenuItem, Sheet, confirmDialog, promptDialog, cx } from '../components/ui'
+import { MoveSheet, NewItemSheet, ShareSheet, TagEditor, saveTemplateFlow } from '../components/ItemBits'
+import { Button, Empty, Menu, MenuItem, Sheet, confirmDialog, cx } from '../components/ui'
 import { fmtDue } from '../components/Tile'
 import { t, tn, type MsgKey } from '../i18n'
 
@@ -99,14 +99,7 @@ export function ItemPage() {
           <MenuItem icon={<Copy size={16} />} onClick={async () => { close(); const nid = await duplicateItem(item.id); if (nid) nav(`/i/${nid}`) }}>{t('item.duplicate')}</MenuItem>
           <MenuItem
             icon={<LayoutTemplate size={16} />}
-            onClick={async () => {
-              close()
-              const name = await promptDialog(t('item.saveTemplate'), item.title, t('common.save'))
-              if (!name) return
-              const dup = findTemplateByName(name)
-              if (dup && !(await confirmDialog(t('item.templateReplace', { name: dup.name }), { okLabel: t('item.templateReplaceOk') }))) return
-              await saveAsTemplate(item.id, name)
-            }}
+            onClick={() => { close(); void saveTemplateFlow(item) }}
           >
             {t('item.saveTemplate')}
           </MenuItem>
@@ -210,7 +203,7 @@ export function ItemPage() {
                   <ItemsView items={kids} view={view} scopeIds={scope} rootId={item.id} />
                 ) : (
                   <button onClick={() => setSheet('new')} className="flex w-full flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-line px-4 py-7 text-center transition hover:border-accent">
-                    <span className="inline-flex items-center gap-2 font-medium text-accent-strong"><FolderPlus size={18} /> {t('item.newSub')}</span>
+                    <span className="inline-flex items-center gap-2 font-medium text-accent-strong"><ListPlus size={18} /> {t('add.emptyItem')}</span>
                     <span className="text-[13px] text-muted">{t('add.emptyItemBody')}</span>
                   </button>
                 )}

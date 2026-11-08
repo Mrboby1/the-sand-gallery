@@ -78,6 +78,11 @@ body {
 
 .font-display { font-variation-settings: "SOFT" 60, "WONK" 0; letter-spacing: -0.01em; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+/* item tiles: no iOS/Android long-press callout or text selection (long-press opens our own menu) */
+.no-callout, .no-callout * { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+/* only on devices with a real mouse */
+.only-hover { display: none; }
+@media (hover: hover) and (pointer: fine) { .only-hover { display: inline-flex; } }
 .no-scrollbar { scrollbar-width: none; }
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 .safe-top { padding-top: env(safe-area-inset-top); }

@@ -1,24 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertCircle, ChevronLeft, ChevronRight, CloudUpload, ExternalLink, Image as ImageIcon, Play, RotateCw, Star, Trash2, Upload, X } from 'lucide-react'
+import { AlertCircle, Camera, ChevronLeft, ChevronRight, CloudUpload, ExternalLink, ImagePlus, Play, Plus, RotateCw, Star, Trash2, X } from 'lucide-react'
 import type { Item, Media } from '../lib/types'
 import { useApp, deleteMedia, dismissUpload, pendingAsMedia, retryUpload, updateItem, updateMedia, uploadFiles } from '../store/app'
-import { useMediaUrl } from '../lib/hooks'
+import { useMediaQuery, useMediaUrl } from '../lib/hooks'
 import { Thumb } from './Tile'
-import { Button, IconButton, confirmDialog, cx } from './ui'
+import { IconButton, confirmDialog, cx } from './ui'
 import { t } from '../i18n'
 
 type Filter = 'all' | 'process' | 'finished'
-
-export function UploadButton({ itemId, size = 'md' }: { itemId: string; size?: 'sm' | 'md' }) {
-  const ref = useRef<HTMLInputElement>(null)
-  return (
-    <>
-      <input ref={ref} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { void uploadFiles(itemId, [...(e.target.files ?? [])]); e.target.value = '' }} />
-      <Button size={size} variant="soft" onClick={() => ref.current?.click()}><Upload size={16} /> {t('gallery.upload')}</Button>
-    </>
-  )
-}
 
 export function MediaSection({ item }: { item: Item }) {
   const all = useApp((s) => s.data.media)
@@ -27,6 +17,10 @@ export function MediaSection({ item }: { item: Item }) {
   const [filter, setFilter] = useState<Filter>('all')
   const [open, setOpen] = useState<number | null>(null)
   const [drag, setDrag] = useState(false)
+  const picker = useRef<HTMLInputElement>(null)
+  const pick = () => picker.current?.click()
+  // phones/tablets: no drag and drop there, so no dotted drop zone or "drop" wording
+  const touch = useMediaQuery('(pointer: coarse)')
   const media = all
     .filter((m) => m.item_id === item.id)
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
@@ -53,14 +47,25 @@ export function MediaSection({ item }: { item: Item }) {
             </button>
           ))}
         </div>
-        <UploadButton itemId={item.id} size="sm" />
       </div>
+      {/* no capture attribute: phones offer both the camera and the gallery */}
+      <input ref={picker} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { void uploadFiles(item.id, [...(e.target.files ?? [])]); e.target.value = '' }} />
 
       {shown.length === 0 && uploads.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-line px-6 py-10 text-center text-sm text-muted">
-          <ImageIcon size={28} strokeWidth={1.4} className="mb-2 text-accent/60" />
-          {t('gallery.emptyMedia')}
-        </div>
+        touch ? (
+          <button onClick={pick} className="flex w-full items-center gap-4 rounded-3xl bg-surface-2 px-5 py-5 text-left transition active:scale-[0.99]">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-on-primary"><Camera size={22} /></span>
+            <span>
+              <span className="block font-medium">{t('gallery.addMedia')}</span>
+              <span className="block text-[13px] text-muted">{t('gallery.addMediaHint')}</span>
+            </span>
+          </button>
+        ) : (
+          <button onClick={pick} className="flex w-full flex-col items-center justify-center rounded-3xl border-2 border-dashed border-line px-6 py-10 text-center text-sm text-muted transition hover:border-accent hover:bg-accent-soft/40 hover:text-ink">
+            <ImagePlus size={28} strokeWidth={1.4} className="mb-2 text-accent" />
+            {t('gallery.emptyMediaDesktop')}
+          </button>
+        )
       ) : (
         <div className="grid grid-cols-3 gap-1 overflow-hidden rounded-2xl sm:grid-cols-4 sm:gap-1.5 lg:grid-cols-6">
           {shown.map((m, i) => (
@@ -106,6 +111,10 @@ export function MediaSection({ item }: { item: Item }) {
               )}
             </div>
           ))}
+          <button onClick={pick} aria-label={t('gallery.addMedia')} title={t('gallery.addMedia')} className="flex aspect-square flex-col items-center justify-center gap-1 bg-surface-2 text-muted transition hover:bg-accent-soft hover:text-ink">
+            <Plus size={24} />
+            <span className="text-[11px] font-medium">{t('gallery.add')}</span>
+          </button>
         </div>
       )}
       {drag && <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-3xl text-lg font-medium text-accent-strong">{t('gallery.dropHere')}</div>}

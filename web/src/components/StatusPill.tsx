@@ -41,10 +41,10 @@ export function StatusPill({ status, size = 'sm', solid = true, className }: { s
 }
 
 /** The bottom status bar on the item page: every status as a tappable pill. */
-export function StatusBar({ statuses, value, onChange }: { statuses: Status[]; value: string | null; onChange: (id: string | null) => void }) {
+export function StatusBar({ statuses, value, onChange, wrap }: { statuses: Status[]; value: string | null; onChange: (id: string | null) => void; wrap?: boolean }) {
   const sorted = [...statuses].sort((a, b) => a.sort_order - b.sort_order)
   return (
-    <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 py-3">
+    <div className={cx('no-scrollbar flex gap-2 px-4 py-3', wrap ? 'flex-wrap' : 'overflow-x-auto')}>
       {sorted.map((s) => {
         const active = s.id === value
         return (
