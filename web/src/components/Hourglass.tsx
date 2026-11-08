@@ -117,22 +117,22 @@ function Hourglass2D({ running, size, className, title, detail }: { running: boo
       <defs><clipPath id={clip}><path d={inside} /></clipPath></defs>
       {/* the sand mound in the upper half, flat colour */}
       <g clipPath={`url(#${clip})`}>
-        <path d="M 0 54 C 20 38 40 34 52 40 Q 60 46 68 40 C 80 34 100 38 120 54 L 120 84 L 0 84 Z" fill="var(--hg2-sand)" />
+        <path d="M 0 54 C 20 38 40 34 52 40 Q 60 46 68 40 C 80 34 100 38 120 54 L 120 84 L 0 84 Z" fill="var(--hg2-sand-eff)" />
         {/* the crater where the sand drains into the neck */}
         <ellipse cx="60" cy="43.4" rx="4.2" ry="1.3" fill="#000" opacity="0.14" />
         {full && <SurfaceSliders list={SLIDERS_2D} fill="rgba(0,0,0,0.26)" />}
       </g>
       {incoming.map((g, i) => (
-        <circle key={`i${i}`} className="grain in" cx={g.x} cy={top + 2} r={g.r} fill="var(--hg2-sand)"
+        <circle key={`i${i}`} className="grain in" cx={g.x} cy={top + 2} r={g.r} fill="var(--hg2-sand-eff)"
           style={{ ['--d' as string]: `${g.d}s`, ['--delay' as string]: `${g.delay}s`, ['--dy' as string]: `${g.dy}px`, ['--dx' as string]: `${g.dx}px` }} />
       ))}
       {outgoing.map((g, i) => (
-        <circle key={`o${i}`} className="grain" cx={g.x} cy={82} r={g.r} fill="var(--hg2-sand)"
+        <circle key={`o${i}`} className="grain" cx={g.x} cy={82} r={g.r} fill="var(--hg2-sand-eff)"
           style={{ ['--d' as string]: `${g.d}s`, ['--delay' as string]: `${g.delay}s`, ['--dy' as string]: `${g.dy}px`, ['--dx' as string]: `${g.dx}px` }} />
       ))}
       {/* two bare walls: open at the top and at the bottom */}
-      <path d={leftWall} fill="none" stroke="var(--hg2-wall)" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-      <path d={rightWall} fill="none" stroke="var(--hg2-wall)" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={leftWall} fill="none" stroke="var(--hg2-wall-eff)" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={rightWall} fill="none" stroke="var(--hg2-wall-eff)" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -143,6 +143,7 @@ export function Hourglass({
   className = '',
   title,
   detail = 'full',
+  fill = 1,
 }: {
   running?: boolean
   /** Width in px; the height follows the drawing's aspect ratio. */
@@ -150,10 +151,12 @@ export function Hourglass({
   className?: string
   title?: string
   detail?: 'full' | 'lite'
+  /** How full the upper bulb is (0..1), e.g. from the item's total time (sandFill). */
+  fill?: number
 }) {
   const style = useStyle()
   // big hourglasses: real moving grains on a canvas; small glyphs keep the light CSS version
-  if (detail === 'full' && typeof window !== 'undefined' && 'Path2D' in window) return <HourglassSim style={style} running={running} size={size} className={className} title={title} />
+  if (detail === 'full' && typeof window !== 'undefined' && 'Path2D' in window) return <HourglassSim style={style} running={running} size={size} className={className} title={title} fill={fill} />
   if (style === 'line') return <Hourglass2D running={running} size={size} className={className} title={title} detail={detail} />
   return <HourglassClassic running={running} size={size} className={className} title={title} detail={detail} />
 }
@@ -217,7 +220,7 @@ function HourglassClassic({ running, size, className, title, detail }: { running
 
       {/* the pile in the upper bulb */}
       <g clipPath={`url(#${clip})`}>
-        <path className="flat-only" d="M 0 38 Q 60 62 120 38 L 120 84 L 0 84 Z" fill="var(--sand-2)" />
+        <path className="flat-only" d="M 0 38 Q 60 62 120 38 L 120 84 L 0 84 Z" fill="var(--hg-sand-eff)" />
         <g className="gloss-only">
           <path d="M 0 38 Q 60 62 120 38 L 120 84 L 0 84 Z" fill={`url(#${sand})`} />
           <path d="M 30 44 Q 60 58 90 44" fill="none" stroke="var(--sand-1)" strokeOpacity="0.7" strokeWidth="1.2" />
@@ -234,7 +237,7 @@ function HourglassClassic({ running, size, className, title, detail }: { running
           cx={g.x}
           cy={inStart}
           r={g.r}
-          fill="var(--sand-2)"
+          fill="var(--hg-sand-eff)"
           style={{ ['--d' as string]: `${g.d}s`, ['--delay' as string]: `${g.delay}s`, ['--dy' as string]: `${g.dy}px`, ['--dx' as string]: `${g.dx}px` }}
         />
       ))}
@@ -245,7 +248,7 @@ function HourglassClassic({ running, size, className, title, detail }: { running
           cx={g.x}
           cy={outStart}
           r={g.r}
-          fill="var(--sand-2)"
+          fill="var(--hg-sand-eff)"
           style={{ ['--d' as string]: `${g.d}s`, ['--delay' as string]: `${g.delay}s`, ['--dy' as string]: `${g.dy}px`, ['--dx' as string]: `${g.dx}px` }}
         />
       ))}
@@ -254,7 +257,7 @@ function HourglassClassic({ running, size, className, title, detail }: { running
       <path
         d="M 26 18 C 26 52 56 66 56.5 80 C 56 94 26 108 26 142 M 94 18 C 94 52 64 66 63.5 80 C 64 94 94 108 94 142"
         fill="none"
-        stroke="var(--glass-line)"
+        stroke="var(--hg-line-eff)"
         strokeWidth="2.2"
         strokeLinecap="round"
       />
@@ -265,13 +268,23 @@ function HourglassClassic({ running, size, className, title, detail }: { running
       </g>
 
       {/* open rims, top and bottom */}
-      <ellipse cx="60" cy="18" rx="35" ry="6" fill="none" stroke="var(--rim)" strokeWidth="3.2" />
-      <ellipse cx="60" cy="142" rx="35" ry="6" fill="none" stroke="var(--rim)" strokeWidth="3.2" />
+      <ellipse cx="60" cy="18" rx="35" ry="6" fill="none" stroke="var(--hg-rim-eff)" strokeWidth="3.2" />
+      <ellipse cx="60" cy="142" rx="35" ry="6" fill="none" stroke="var(--hg-rim-eff)" strokeWidth="3.2" />
     </svg>
   )
 }
 
 /** Tiny glyph for chips and labels. */
+/**
+ * How full the hourglass's upper bulb is for a total tracked time: empty for a new project, filling up as time
+ * is tracked and full after 10 minutes (ease-out: quick at first, then settling).
+ */
+export const SAND_FULL_MS = 10 * 60_000
+export function sandFill(totalMs: number): number {
+  const t = Math.max(0, Math.min(1, totalMs / SAND_FULL_MS))
+  return 1 - (1 - t) * (1 - t)
+}
+
 export function HourglassGlyph({ size = 14, running = false, className = '' }: { size?: number; running?: boolean; className?: string }) {
   return <Hourglass size={size} running={running} detail="lite" className={className} />
 }

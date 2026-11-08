@@ -125,6 +125,8 @@ export interface Settings {
   hg_hue: number | null
   sand_hue: number | null
   bg_hue: number | null
+  /** Colour of the frozen (paused) hourglass; null = icy blue. */
+  freeze_hue: number | null
   updated_at?: ISODate
 }
 
@@ -180,6 +182,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hg_hue: null,
   sand_hue: null,
   bg_hue: null,
+  freeze_hue: null,
 }
 
 export const DEFAULT_STATUSES: Pick<Status, 'name' | 'color' | 'is_finished'>[] = [

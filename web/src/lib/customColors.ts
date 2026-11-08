@@ -2,13 +2,13 @@
 // app background. Only the hue is chosen; lightness and saturation are fixed per theme so text stays readable
 // (surfaces and borders are derived from the background hue). null = the original colours from index.css.
 
-export interface CustomColors { hg_hue: number | null; sand_hue: number | null; bg_hue: number | null }
+export interface CustomColors { hg_hue: number | null; sand_hue: number | null; bg_hue: number | null; freeze_hue?: number | null }
 
 const KEY = 'sg.colors'
 const VARS = [
   '--sg-bg', '--sg-surface', '--sg-surface-2', '--sg-line',
   '--glass-line', '--rim', '--hg2-wall', '--glass-fill',
-  '--sand-1', '--sand-2', '--sand-3', '--hg2-sand',
+  '--sand-1', '--sand-2', '--sand-3', '--hg2-sand', '--freeze',
 ]
 let current: CustomColors = read()
 
@@ -41,6 +41,7 @@ export function colorVars(c: CustomColors, dark: boolean): Record<string, string
       '--hg2-sand': dark ? hsl(h, 48, 54) : hsl(h, 56, 41),
     })
   }
+  if (c.freeze_hue !== null && c.freeze_hue !== undefined) v['--freeze'] = dark ? hsl(c.freeze_hue, 70, 68) : hsl(c.freeze_hue, 78, 60)
   return v
 }
 

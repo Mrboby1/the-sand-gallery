@@ -10,6 +10,11 @@
  *   there digs a crater, and the stream from above lands in the middle and builds a small hill inside it.
  * - Outside the glass grid (falling in from above, or out below the neck) grains are free particles with real
  *   gravity (vy += g each step) and a little sideways jitter; they fade in above the top and fade out below.
+ * - The neck is a V that narrows to one cell (extra simulation-only walls, steeper than the angle of repose),
+ *   so the bottom of the pile comes out pointy, made by the grains themselves.
+ * - Fill: the pile holds a target number of grains (setTarget, 0..1 of a full bulb). Below target extra grains
+ *   pour in (inflow > outflow, the hill and crater grow naturally); above it, grains that fall out are not
+ *   recycled.
  * - Drawing is one tiny image (1 pixel per grain cell) scaled up with nearest-neighbour: one drawImage a frame.
  *
  * Coordinates are the hourglass SVG's viewBox units (x 0..120).
@@ -28,8 +33,8 @@ export interface SimShape {
 interface Particle { x: number; y: number; vx: number; vy: number; s: number; incoming: boolean }
 
 const G = 0.155 // gravity, viewBox units per step² (≈ 30 steps per second)
-/** Chance per step that a grain at the neck gets through: a real hourglass only trickles (~30 grains/s here). */
-const NECK_PASS = 0.22
+/** Chance per step that the grain in the one-cell neck gets through: a real hourglass only trickles (~20 grains/s). */
+const NECK_PASS = 0.7
 const SLIP = 0.7
 /** Brightness of the three grain shades (subtle variation). */
 const SHADES = [1, 1.09, 0.92]
@@ -48,8 +53,14 @@ export class SandSim {
   private img: ImageData | null = null
   private buf: HTMLCanvasElement | OffscreenCanvas | null = null
   private rgb: [number, number, number] = [217, 154, 78]
+  /** Grid cells of a full upper bulb (from the level down to the neck). */
+  private capacity = 0
+  private target = 0
+  private gridCount = 0
+  /** Grains normally in flight (the steady stream). */
+  private stream = 0
 
-  constructor(readonly shape: SimShape, cell: number, seed = 7) {
+  constructor(readonly shape: SimShape, cell: number, seed = 7, fill = 1) {
     this.cell = cell
     this.W = Math.ceil(120 / cell)
     this.H = Math.ceil(shape.height / cell)
@@ -60,9 +71,13 @@ export class SandSim {
     this.rowTop = Math.max(0, this.gyOf(shape.glassTop) - 2)
     this.rowNeck = this.gyOf(shape.neckY) // last row still above the neck
     this.rowExit = this.gyOf(shape.neckY + 3) // from here grains fall freely
+    this.stream = Math.round(14 / cell)
     this.buildWalls()
-    this.fill()
+    this.fill(fill)
   }
+
+  /** How full the upper bulb should be, 0..1. */
+  setTarget(fill: number) { this.target = Math.round(Math.max(0, Math.min(1, fill)) * this.capacity) }
 
   private wy(gy: number) { return this.shape.top + (gy + 0.5) * this.cell } // world y of a cell centre
   private gyOf(y: number) { return Math.floor((y - this.shape.top) / this.cell) }
@@ -77,15 +92,25 @@ export class SandSim {
       if (y < glassTop || y > glassBottom) continue // open air above and below the glass
       for (let gx = 0; gx < this.W; gx++) if (!ctx.isPointInPath(path, (gx + 0.5) * this.cell, y)) this.wall[gy * this.W + gx] = 1
     }
+    // the V into the neck: 45° walls (steeper than sand rests) that end in a single-cell hole
+    const { neckY } = this.shape
+    const centre = Math.floor(60 / this.cell)
+    for (let gy = this.gyOf(neckY - 12); gy <= this.gyOf(neckY); gy++) {
+      const half = Math.max(0, Math.floor((neckY - this.wy(gy)) / this.cell))
+      for (let gx = 0; gx < this.W; gx++) if (Math.abs(gx - centre) > half) this.wall[gy * this.W + gx] = 1
+    }
   }
 
-  private fill() {
-    for (let gy = this.gyOf(this.shape.level); gy <= this.rowNeck; gy++) {
-      for (let gx = 0; gx < this.W; gx++) {
-        const i = gy * this.W + gx
-        if (!this.wall[i]) this.sand[i] = 1 + Math.floor(this.rnd() * 3)
-      }
+  /** Fills the bulb from the neck upwards to `fill` (0..1) of its capacity. */
+  private fill(fill: number) {
+    const cells: number[] = []
+    for (let gy = this.rowNeck; gy >= this.gyOf(this.shape.level); gy--) {
+      for (let gx = 0; gx < this.W; gx++) { const i = gy * this.W + gx; if (!this.wall[i]) cells.push(i) }
     }
+    this.capacity = cells.length
+    this.setTarget(fill)
+    for (let k = 0; k < this.target; k++) this.sand[cells[k]] = 1 + Math.floor(this.rnd() * 3)
+    this.gridCount = this.target
   }
 
   private empty(x: number, y: number) {
@@ -107,6 +132,7 @@ export class SandSim {
     const { W } = this
     const bottom = this.shape.top + this.shape.height
     // grid: rows bottom-up, so a grain moves at most once per step (it only ever moves into a lower row)
+    let count = 0
     for (let gy = Math.min(this.rowExit, this.H - 2); gy >= this.rowTop; gy--) {
       const ltr = this.rnd() < 0.5
       for (let k = 0; k < W; k++) {
@@ -114,13 +140,15 @@ export class SandSim {
         const i = gy * W + gx
         const v = this.sand[i]
         if (!v) continue
+        count++
         if (gy >= this.rowExit) {
           // through the neck: from here it falls freely
           this.sand[i] = 0
           this.free.push({ x: (gx + 0.5) * this.cell, y: this.wy(gy), vx: (this.rnd() - 0.5) * 0.12, vy: this.cell * 0.8, s: v - 1, incoming: false })
           continue
         }
-        if (gy === this.rowNeck && this.rnd() > NECK_PASS) continue // the neck only trickles
+        // the neck only trickles; while the pile is below its target it lets even less through, so it builds up
+        if (gy === this.rowNeck && this.rnd() > (this.gridCount < this.target ? NECK_PASS * 0.3 : NECK_PASS)) continue
         let nx = gx
         if (this.empty(gx, gy + 1)) nx = gx
         else if (this.rnd() < SLIP) {
@@ -133,6 +161,15 @@ export class SandSim {
         this.sand[(gy + 1) * W + nx] = v
       }
     }
+    this.gridCount = count
+    // below the target fill: pour in extra grains (a few per step at most)
+    let incoming = 0
+    for (const p of this.free) if (p.incoming) incoming++
+    for (let n = 0; n < 2 && count + incoming < this.target + this.stream; n++, incoming++) {
+      const p: Particle = { x: 0, y: 0, vx: 0, vy: 0, s: Math.floor(this.rnd() * 3), incoming: true }
+      this.respawn(p)
+      this.free.push(p)
+    }
     // free particles
     const still: Particle[] = []
     for (const p of this.free) {
@@ -144,7 +181,9 @@ export class SandSim {
         // falling in from above: land on the first occupied cell along the way
         const gx = Math.max(0, Math.min(W - 1, Math.floor(p.x / this.cell)))
         let landed = false
+        const vZone = this.gyOf(this.shape.neckY - 12) // inside the V the grain joins the grid (it cannot just drop through the hole)
         for (let gy = Math.max(0, this.gyOf(prevY)); gy <= this.gyOf(p.y) && gy < this.H; gy++) {
+          if (gy >= vZone && this.empty(gx, gy)) { this.sand[gy * W + gx] = 1 + p.s; landed = true; break }
           if (!this.empty(gx, gy)) {
             let ly = gy - 1
             while (ly > 0 && !this.empty(gx, ly)) ly--
@@ -156,21 +195,22 @@ export class SandSim {
         if (landed) continue
         if (p.y > this.shape.neckY + 3) p.incoming = false // fell straight through (bulb momentarily empty)
       }
-      if (!p.incoming && p.y > bottom) this.respawn(p)
+      if (!p.incoming && p.y > bottom) {
+        // recycle to the top, unless the bulb is already above its target fill
+        if (this.gridCount + incoming >= this.target + this.stream + 4) continue
+        this.respawn(p)
+        incoming++
+      }
       still.push(p)
     }
     this.free = still
   }
 
   /** Reads the CSS colour (hex, rgb() or hsl()) into RGB by painting one pixel. */
-  setColor(color: string) {
-    const c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas')
-    const ctx = c.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D
-    ctx.fillStyle = '#d99a4e'
-    ctx.fillStyle = color
-    ctx.fillRect(0, 0, 1, 1)
-    const d = ctx.getImageData(0, 0, 1, 1).data
-    this.rgb = [d[0], d[1], d[2]]
+  /** Sand colour; `frost` (0..1) blends it toward the freeze colour (a paused hourglass). */
+  setColor(color: string, freeze = '#5ab4e6', frost = 0) {
+    const a = rgbOf(color), b = rgbOf(freeze), k = Math.max(0, Math.min(1, frost)) * 0.55
+    this.rgb = [0, 1, 2].map((i) => Math.round(a[i] * (1 - k) + b[i] * k)) as [number, number, number]
   }
 
   /** Draws all grains as one nearest-neighbour-scaled image. The canvas transform maps viewBox units to pixels. */
@@ -209,7 +249,7 @@ export class SandSim {
 
   /** Start some grains in flight so the stream exists from the first frame, then let things settle. */
   prewarm(steps: number) {
-    const n = Math.round(14 / this.cell)
+    const n = this.target ? this.stream : 0
     for (let i = 0; i < n; i++) {
       const p: Particle = { x: 0, y: 0, vx: 0, vy: 0, s: Math.floor(this.rnd() * 3), incoming: true }
       this.respawn(p)
@@ -218,4 +258,18 @@ export class SandSim {
     }
     for (let i = 0; i < steps; i++) this.step()
   }
+}
+
+let probe: CanvasRenderingContext2D | null = null
+/** Any CSS colour → [r, g, b] (painted on a 1-pixel canvas). */
+function rgbOf(color: string): [number, number, number] {
+  if (!probe) {
+    const c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas')
+    probe = c.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D
+  }
+  probe.fillStyle = '#d99a4e'
+  probe.fillStyle = color
+  probe.fillRect(0, 0, 1, 1)
+  const d = probe.getImageData(0, 0, 1, 1).data
+  return [d[0], d[1], d[2]]
 }

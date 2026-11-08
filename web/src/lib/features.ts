@@ -18,6 +18,8 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
   { id: 'time', features: [
     { id: 'timer', keywords: 'timer start pause stopwatch total subtasks running one at a time' },
     { id: 'fullscreen', keywords: 'fullscreen hourglass grains of sand count' },
+    { id: 'sandfill', keywords: 'sand fill empty new project pile grows' },
+    { id: 'freeze', keywords: 'paused frozen freeze ice blue frost' },
     { id: 'timelog', keywords: 'time log edit session add manual weekly total' },
     { id: 'notifications', keywords: 'notification running timer stop open phone' },
     { id: 'reminders', keywords: 'reminder still working remind every custom interval' },
@@ -42,7 +44,8 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
   { id: 'look', features: [
     { id: 'theme', keywords: 'dark mode light theme' },
     { id: 'styles', keywords: 'style flat glossy 2d hourglass' },
-    { id: 'colours', keywords: 'colour color slider hue background sand' },
+    { id: 'colours', keywords: 'colour color slider hue background sand freeze' },
+    { id: 'customise', keywords: 'customise customize full screen palette preview colours style theme' },
   ] },
   { id: 'app', features: [
     { id: 'install', keywords: 'install phone home screen app' },

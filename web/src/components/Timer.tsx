@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation } from 'react-router-dom'
-import { Maximize2, Pause, Play, X } from 'lucide-react'
+import { Maximize2, Palette, Pause, Play, X } from 'lucide-react'
 import { useApp, startTimer, stopTimer } from '../store/app'
 import { useItemsMap, useRunning, useTotals } from '../lib/hooks'
 import { fmtClock, fmtDuration } from '../lib/time'
-import { Hourglass } from './Hourglass'
+import { Hourglass, sandFill } from './Hourglass'
 import { GrainCount } from './GrainCount'
+import { CustomizePanel } from './CustomizePanel'
 import { Button, IconButton, cx } from './ui'
 import { t } from '../i18n'
 
@@ -19,13 +20,13 @@ export function TimerCard({ itemId, hasChildren, onFullscreen }: { itemId: strin
   const own = totals.own(itemId)
   const childRunning = ticking && !runningHere ? byId.get(totals.runningItemId!) : null
   return (
-    <div className={cx('relative overflow-hidden rounded-3xl p-4 transition sm:p-5', ticking ? 'bg-accent-soft' : 'border border-line bg-surface')}>
+    <div className={cx('relative overflow-hidden rounded-3xl p-4 transition-colors duration-700 sm:p-5', ticking ? 'bg-accent-soft' : total > 0 ? 'frozen-card border border-line' : 'border border-line bg-surface')}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <button onClick={onFullscreen} aria-label={t('timer.fullscreen')} className="shrink-0 transition active:scale-95">
-          <Hourglass running={ticking} size={50} />
+          <Hourglass running={ticking} size={50} fill={sandFill(total)} />
         </button>
         <div className="min-w-0 flex-1">
-          <div className={cx('font-display text-[38px] font-semibold leading-none tabular sm:text-[42px]', ticking && 'text-accent-strong')}>
+          <div className={cx('font-display text-[38px] font-semibold leading-none tabular transition-colors duration-700 sm:text-[42px]', ticking ? 'text-accent-strong' : total > 0 && 'frozen-text')}>
             {fmtClock(total)}
           </div>
           <div className="mt-1.5 truncate text-[13px] text-muted">
@@ -59,6 +60,7 @@ export function FullscreenTimer({ itemId, onClose }: { itemId: string; onClose: 
   const runningHere = totals.runningItemId === itemId
   const ticking = totals.runningChain.has(itemId)
   const [size, setSize] = useState(() => Math.min(window.innerHeight * 0.5, window.innerWidth * 0.6, 340))
+  const [panel, setPanel] = useState(false)
 
   useEffect(() => {
     const h = () => setSize(Math.min(window.innerHeight * 0.5, window.innerWidth * 0.6, 340))
@@ -86,9 +88,11 @@ export function FullscreenTimer({ itemId, onClose }: { itemId: string; onClose: 
     <div data-fullscreen-timer className="fade fixed inset-0 z-[60] flex flex-col items-center justify-center bg-bg px-6 safe-top safe-bottom">
       <div className="gloss-only pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--sg-accent-soft),transparent_65%)] opacity-80" />
       <IconButton label={t('timer.close')} onClick={onClose} className="absolute right-4 top-[calc(1rem+env(safe-area-inset-top))]"><X size={22} /></IconButton>
+      <IconButton label={t('colors.customize')} onClick={() => setPanel(!panel)} active={panel} className="absolute left-4 top-[calc(1rem+env(safe-area-inset-top))] z-20"><Palette size={20} /></IconButton>
+      {panel && <CustomizePanel onClose={() => setPanel(false)} />}
       <div className="relative flex flex-col items-center">
-        <Hourglass running={ticking} size={size * 0.75} />
-        <div className={cx('mt-6 font-display text-6xl font-semibold tabular sm:text-7xl', ticking && 'text-accent-strong')}>{fmtClock(totals.total(itemId))}</div>
+        <Hourglass running={ticking} size={size * 0.75} fill={sandFill(totals.total(itemId))} />
+        <div className={cx('mt-6 font-display text-6xl font-semibold tabular transition-colors duration-700 sm:text-7xl', ticking ? 'text-accent-strong' : 'frozen-text')}>{fmtClock(totals.total(itemId))}</div>
         <GrainCount totalMs={totals.total(itemId)} asOf={totals.now} running={ticking} />
         <div className="mt-3 max-w-[80vw] truncate text-center text-lg text-muted">{item?.title}</div>
         <Button

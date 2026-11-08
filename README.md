@@ -97,9 +97,25 @@ glass, fading out below it, frozen when paused.
 
 ### Colours
 Settings > Appearance > Colours: hue sliders for the hourglass (glass/outline), the sand and the app background,
-saved per user in `settings` (`hg_hue`, `sand_hue`, `bg_hue`; null = original colours) so they sync across devices.
+saved per user in `settings` (`hg_hue`, `sand_hue`, `bg_hue`, `freeze_hue`; null = original colours) so they sync across devices.
 `src/lib/customColors.ts` turns a hue into CSS variables for the current theme with fixed lightness/saturation, so
 text keeps its contrast (surfaces and borders are derived from the background hue). Works with all three styles.
+Only the save is debounced; the preview (including the canvas sand, via a MutationObserver on `<html style>`) updates
+on every slider move without restarting the simulation.
+"Full screen" (and the palette button on the timer's fullscreen view) opens `CustomizeFullscreen` /
+`CustomizePanel` (`src/components/CustomizePanel.tsx`): the big live hourglass with a Running/Paused preview toggle and
+a collapsible sheet with theme, style and all colour sliders.
+
+### Sand fill and the neck
+The upper pile follows the item's total time: `sandFill(total)` = 1 − (1 − t)², t = total / 10 min (empty for a new
+project, full at 10 min). `SandSim` starts with that many grains and gets `setTarget` as time grows; below target it
+pours in extra grains and the neck lets fewer through, so the hill builds up naturally. The neck has simulation-only
+45° walls narrowing to one cell, so the bottom of the pile is a point made by the grains.
+
+### Frozen when paused
+A paused hourglass blends its outline, rims and sand toward `--freeze` (`freeze_hue`, default icy blue) with CSS
+transitions, the canvas grains blend over ~0.8 s, and a static frost layer (tint, frosted edges, crystals) fades in.
+The timer card and time text take an icy tint too. Small CSS glyphs get a lighter tint. Nothing animates while frozen.
 
 ### Wake-up
 Free Supabase projects pause after 7 idle days (the daily cron should prevent it). If the app cannot reach the DB it

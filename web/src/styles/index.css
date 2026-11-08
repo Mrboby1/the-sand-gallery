@@ -114,6 +114,20 @@ body {
 @keyframes flash-ring { 0%, 60% { box-shadow: 0 0 0 3px var(--sg-accent); } 100% { box-shadow: 0 0 0 3px transparent; } }
 .flash { animation: flash-ring 1.6s ease-out; }
 
+/* ---------- Frozen (paused) hourglass ----------
+   Strokes/fills use the *-eff variables; a paused hourglass blends them toward --freeze (CSS transitions on
+   stroke/fill/color animate the change), and the frost layer fades in. Nothing animates while frozen. */
+:root { --freeze: hsl(200 80% 62%); }
+[data-theme="dark"] { --freeze: hsl(200 70% 68%); }
+.hg { --hg-line-eff: var(--glass-line); --hg-rim-eff: var(--rim); --hg2-wall-eff: var(--hg2-wall); --hg-sand-eff: var(--sand-2); --hg2-sand-eff: var(--hg2-sand); }
+.hg.paused { --hg-line-eff: color-mix(in srgb, var(--glass-line) 72%, var(--freeze)); --hg-rim-eff: color-mix(in srgb, var(--rim) 72%, var(--freeze)); --hg2-wall-eff: color-mix(in srgb, var(--hg2-wall) 72%, var(--freeze)); --hg-sand-eff: color-mix(in srgb, var(--sand-2) 70%, var(--freeze)); --hg2-sand-eff: color-mix(in srgb, var(--hg2-sand) 70%, var(--freeze)); }
+.hg.frozen { --hg-line-eff: color-mix(in srgb, var(--glass-line) 40%, var(--freeze)); --hg-rim-eff: color-mix(in srgb, var(--rim) 40%, var(--freeze)); --hg2-wall-eff: color-mix(in srgb, var(--hg2-wall) 40%, var(--freeze)); }
+.hg path, .hg ellipse, .hg circle, .hg rect { transition: stroke .8s ease, fill .8s ease; }
+.hg .frost { opacity: 0; transition: opacity .9s ease; }
+.hg.frozen .frost { opacity: 1; }
+.frozen-text { color: color-mix(in srgb, var(--sg-ink) 55%, var(--freeze)); }
+.frozen-card { background: color-mix(in srgb, var(--sg-surface) 86%, var(--freeze)); border-color: color-mix(in srgb, var(--sg-line) 60%, var(--freeze)); }
+
 .gloss-only { display: none; }
 [data-style="glossy"] .gloss-only { display: revert; }
 [data-style="glossy"] .flat-only { display: none; }
