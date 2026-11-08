@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation } from 'react-router-dom'
 import { Maximize2, Palette, Pause, Play, X } from 'lucide-react'
 import { useApp, startTimer, stopTimer } from '../store/app'
-import { useItemsMap, useRunning, useTotals } from '../lib/hooks'
+import { useItemsMap, useMediaQuery, useRunning, useTotals } from '../lib/hooks'
 import { fmtClock, fmtDuration } from '../lib/time'
 import { Hourglass, sandFill } from './Hourglass'
 import { GrainCount } from './GrainCount'
-import { CustomizePanel } from './CustomizePanel'
+import { CustomizePanel, WIDE_QUERY, fitTimer, useBox } from './CustomizePanel'
 import { Button, IconButton, cx } from './ui'
 import { t } from '../i18n'
 
@@ -59,19 +59,27 @@ export function FullscreenTimer({ itemId, onClose }: { itemId: string; onClose: 
   const item = useApp((s) => s.data.items.find((i) => i.id === itemId))
   const runningHere = totals.runningItemId === itemId
   const ticking = totals.runningChain.has(itemId)
-  const [size, setSize] = useState(() => Math.min(window.innerHeight * 0.5, window.innerWidth * 0.6, 340))
   const [panel, setPanel] = useState(false)
+  const wide = useMediaQuery(WIDE_QUERY)
+  const stage = useRef<HTMLDivElement>(null)
+  const box = useBox(stage)
+  const fit = fitTimer(box.w, box.h)
+  const toggle = () => (runningHere ? stopTimer() : startTimer(itemId))
+  const toggleRef = useRef(toggle)
+  toggleRef.current = toggle
 
+  // Desktop keys: Space = start/pause, Esc = leave fullscreen (Space on a focused button/slider keeps its own meaning)
   useEffect(() => {
-    const h = () => setSize(Math.min(window.innerHeight * 0.5, window.innerWidth * 0.6, 340))
     const k = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
-      if (e.key === ' ') { e.preventDefault(); void (runningHere ? stopTimer() : startTimer(itemId)) }
+      if ((e.key === ' ' || e.code === 'Space') && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLButtonElement || e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault()
+        void toggleRef.current()
+      }
     }
-    window.addEventListener('resize', h)
     window.addEventListener('keydown', k)
-    return () => { window.removeEventListener('resize', h); window.removeEventListener('keydown', k) }
-  }, [onClose, runningHere, itemId])
+    return () => window.removeEventListener('keydown', k)
+  }, [onClose])
 
   // Hourglasses hidden behind this view pause their sand (see HourglassSim).
   useEffect(() => { document.body.dataset.fsTimer = '1'; return () => { delete document.body.dataset.fsTimer } }, [])
@@ -84,26 +92,36 @@ export function FullscreenTimer({ itemId, onClose }: { itemId: string; onClose: 
     return () => { void lock?.release() }
   }, [ticking])
 
+  const total = totals.total(itemId)
   return createPortal(
-    <div data-fullscreen-timer className="fade fixed inset-0 z-[60] flex flex-col items-center justify-center bg-bg px-6 safe-top safe-bottom">
+    <div data-fullscreen-timer className={cx('fade fixed inset-0 z-[60] flex bg-bg', wide ? 'flex-row' : 'flex-col')}>
       <div className="gloss-only pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--sg-accent-soft),transparent_65%)] opacity-80" />
-      <IconButton label={t('timer.close')} onClick={onClose} className="absolute right-4 top-[calc(1rem+env(safe-area-inset-top))]"><X size={22} /></IconButton>
-      <IconButton label={t('colors.customize')} onClick={() => setPanel(!panel)} active={panel} className="absolute left-4 top-[calc(1rem+env(safe-area-inset-top))] z-20"><Palette size={20} /></IconButton>
-      {panel && <CustomizePanel onClose={() => setPanel(false)} />}
-      <div className="relative flex flex-col items-center">
-        <Hourglass running={ticking} size={size * 0.75} fill={sandFill(totals.total(itemId))} />
-        <div className={cx('mt-6 font-display text-6xl font-semibold tabular transition-colors duration-700 sm:text-7xl', ticking ? 'text-accent-strong' : 'frozen-text')}>{fmtClock(totals.total(itemId))}</div>
-        <GrainCount totalMs={totals.total(itemId)} asOf={totals.now} running={ticking} />
-        <div className="mt-3 max-w-[80vw] truncate text-center text-lg text-muted">{item?.title}</div>
-        <Button
-          variant={runningHere ? 'outline' : 'primary'}
-          size="lg"
-          className="mt-8 h-14 w-44 text-base"
-          onClick={() => (runningHere ? stopTimer() : startTimer(itemId))}
-        >
-          {runningHere ? <><Pause size={20} fill="currentColor" /> {t('timer.pause')}</> : <><Play size={20} fill="currentColor" /> {t('timer.start')}</>}
-        </Button>
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col safe-top safe-bottom">
+        <div className="flex shrink-0 items-center justify-between px-4 pt-4">
+          <IconButton label={t('colors.customize')} onClick={() => setPanel(!panel)} active={panel}><Palette size={20} /></IconButton>
+          <IconButton label={t('timer.close')} onClick={onClose}><X size={22} /></IconButton>
+        </div>
+        <div ref={stage} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-6 pb-2">
+          <div className={cx('flex items-center', fit.mode === 'row' ? 'flex-row gap-10' : 'flex-col')}>
+            <Hourglass running={ticking} size={fit.size} fill={sandFill(total)} />
+            <div className="flex flex-col items-center">
+              <div className={cx('font-display font-semibold tabular transition-colors duration-700', fit.mode === 'compact' ? 'mt-2 text-4xl' : fit.mode === 'row' ? 'text-6xl' : 'mt-6 text-6xl sm:text-7xl', ticking ? 'text-accent-strong' : 'frozen-text')}>{fmtClock(total)}</div>
+              {fit.mode !== 'compact' && <GrainCount totalMs={total} asOf={totals.now} running={ticking} />}
+              {fit.mode !== 'compact' && <div className="mt-3 max-w-[80vw] truncate text-center text-lg text-muted sm:max-w-md">{item?.title}</div>}
+              <Button
+                variant={runningHere ? 'outline' : 'primary'}
+                size="lg"
+                className={cx('h-14 w-44 shrink-0 text-base', fit.mode === 'compact' ? 'mt-3' : 'mt-8')}
+                onClick={toggle}
+                title={t('timer.spaceHint')}
+              >
+                {runningHere ? <><Pause size={20} fill="currentColor" /> {t('timer.pause')}</> : <><Play size={20} fill="currentColor" /> {t('timer.start')}</>}
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
+      {panel && <CustomizePanel side={wide} onClose={() => setPanel(false)} />}
     </div>,
     document.body,
   )

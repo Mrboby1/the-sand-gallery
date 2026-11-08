@@ -176,26 +176,44 @@ const CRYSTALS: Record<'classic' | 'line', [number, number, number][]> = {
 
 /** The frozen look: static SVG, faded in/out with a CSS opacity transition (no animation while frozen). */
 function Frost({ uid, interior, kind, size, h }: { uid: string; interior: string; kind: 'classic' | 'line'; size: number; h: number }) {
+  const { glassTop, glassBottom } = SHAPES[kind]
+  const span = glassBottom - glassTop
+  const id = (n: string) => `frost-${n}-${uid}`
+  // frost colour: the freeze hue lifted toward white, so it reads as ice on light and dark glass alike
+  const ice = 'color-mix(in srgb, var(--freeze) 45%, #fff)'
   return (
     <svg viewBox={`0 ${TOP} 120 ${HEIGHT}`} width={size} height={h} className="frost absolute inset-0" aria-hidden overflow="visible">
       <defs>
-        <clipPath id={`frost-clip-${uid}`}><path d={interior} /></clipPath>
-        <linearGradient id={`frost-sheen-${uid}`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0.2" stopColor="#fff" stopOpacity="0" /><stop offset="0.45" stopColor="#fff" stopOpacity="0.28" /><stop offset="0.6" stopColor="#fff" stopOpacity="0" />
+        <clipPath id={id('clip')}><path d={interior} /></clipPath>
+        <filter id={id('blur')} x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3.2" /></filter>
+        {/* fine frosted grain, white speckles with alpha from noise */}
+        <filter id={id('grain')} x="0" y="0" width="1" height="1">
+          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="5" />
+          <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 2.2 -1.05" />
+        </filter>
+        {/* thicker toward the rims (top and bottom of the glass), thin in the middle */}
+        <linearGradient id={id('ends')} gradientUnits="userSpaceOnUse" x1="0" y1={glassTop} x2="0" y2={glassBottom}>
+          <stop offset="0" stopColor="#fff" stopOpacity="0.85" />
+          <stop offset="0.22" stopColor="#fff" stopOpacity="0" />
+          <stop offset="0.78" stopColor="#fff" stopOpacity="0" />
+          <stop offset="1" stopColor="#fff" stopOpacity="0.85" />
         </linearGradient>
+        {/* where the frost is: a soft band along the inside of the walls + the rim ends; clear in the centre */}
+        <mask id={id('mask')} maskUnits="userSpaceOnUse" x="0" y={TOP} width="120" height={HEIGHT}>
+          <path d={interior} fill="none" stroke="#fff" strokeWidth="15" filter={`url(#${id('blur')})`} />
+          <rect x="0" y={glassTop - 4} width="120" height={span + 8} fill={`url(#${id('ends')})`} />
+        </mask>
       </defs>
-      {/* icy tint over the glass (the grains themselves are recoloured in the simulation) */}
-      <path d={interior} fill="var(--freeze)" fillOpacity="0.16" />
-      <g clipPath={`url(#frost-clip-${uid})`}>
-        {/* frosted inner edges */}
-        <path d={interior} fill="none" stroke="#fff" strokeOpacity="0.45" strokeWidth="7" />
-        <path d={interior} fill="none" stroke="var(--freeze)" strokeOpacity="0.35" strokeWidth="3" />
-        <rect x="0" y={TOP} width="120" height={HEIGHT} fill={`url(#frost-sheen-${uid})`} />
-        {/* a few ice crystals */}
-        <g stroke="#fff" strokeOpacity="0.85" strokeWidth="0.55" strokeLinecap="round">
+      <g clipPath={`url(#${id('clip')})`}>
+        <g mask={`url(#${id('mask')})`}>
+          <rect x="0" y={glassTop - 4} width="120" height={span + 8} fill={ice} opacity="0.62" />
+          <rect x="0" y={glassTop - 4} width="120" height={span + 8} filter={`url(#${id('grain')})`} opacity="0.7" />
+        </g>
+        {/* a few small ice crystals on the frosted band */}
+        <g stroke="#fff" strokeOpacity="0.75" strokeWidth="0.45" strokeLinecap="round">
           {CRYSTALS[kind].map(([x, y, r], i) => (
-            <g key={i} transform={`translate(${x} ${y}) rotate(${(i * 23) % 60})`}>
-              <line x1={-r} y1="0" x2={r} y2="0" /><line x1={-r / 2} y1={-r * 0.87} x2={r / 2} y2={r * 0.87} /><line x1={-r / 2} y1={r * 0.87} x2={r / 2} y2={-r * 0.87} />
+            <g key={i} transform={`translate(${x + (x < 60 ? 2.5 : -2.5)} ${y}) rotate(${(i * 23) % 60})`}>
+              <line x1={-r * 0.8} y1="0" x2={r * 0.8} y2="0" /><line x1={-r * 0.4} y1={-r * 0.7} x2={r * 0.4} y2={r * 0.7} /><line x1={-r * 0.4} y1={r * 0.7} x2={r * 0.4} y2={-r * 0.7} />
             </g>
           ))}
         </g>
