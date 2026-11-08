@@ -270,6 +270,12 @@ export const en = {
   'note.has': 'Has a note',
   'note.placeholder': 'A note for this photo or video…',
 
+  'client.on': 'Client view',
+  'client.turnOn': 'Client view: hide costs and prices',
+  'client.turnOff': 'Turn off client view',
+  'client.onToast': 'Client view on: costs are hidden',
+  'client.offToast': 'Client view off',
+
   'common.save': 'Save',
   'common.cancel': 'Cancel',
   'common.delete': 'Delete',

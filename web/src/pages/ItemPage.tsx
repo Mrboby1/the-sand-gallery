@@ -8,6 +8,8 @@ import {
 } from '../store/app'
 import { useIsFinished, useLocalPref, useTotals } from '../lib/hooks'
 import { FinishedView } from '../components/FinishedView'
+import { setClientView, useClientView } from '../lib/clientView'
+import { Eye, EyeOff } from 'lucide-react'
 import { AddMenu } from '../components/AddMenu'
 import { TopBar } from '../components/Shell'
 import { TimerCard, FullscreenTimer } from '../components/Timer'
@@ -44,6 +46,7 @@ export function ItemPage() {
   const [sheet, setSheet] = useState<null | 'new' | 'move' | 'share' | 'template'>(null)
   const totals = useTotals()
   const isFinished = useIsFinished()
+  const clientView = useClientView()
   const [manage, setManage] = useState(false)
   useEffect(() => { setManage(false) }, [id])
 
@@ -130,6 +133,7 @@ export function ItemPage() {
     return (
       <div className="min-h-full pb-16">
         <TopBar back={backTo} crumbs={crumbsNav}>
+          <ClientViewToggle />
           <Button size="sm" variant="ghost" onClick={() => setManage(true)}><Pencil size={15} /> {t('gallery.manage')}</Button>
           {menu}
         </TopBar>
@@ -172,7 +176,7 @@ export function ItemPage() {
 
         <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-10 -mx-4 mt-5 bg-bg/85 px-4 backdrop-blur-xl sm:-mx-6 sm:px-6">
           <div className="no-scrollbar flex gap-1 overflow-x-auto border-b border-line" role="tablist">
-            {TABS.map((tb) => (
+            {TABS.filter((tb) => !(tb.id === 'costs' && finished && clientView)).map((tb) => (
               <button
                 key={tb.id}
                 role="tab"
@@ -216,7 +220,7 @@ export function ItemPage() {
           )}
           {tab === 'notes' && <NotesTab item={item} />}
           {tab === 'log' && <TimeLogTab item={item} hasChildren={kids.length > 0} />}
-          {tab === 'costs' && <CostsTab item={item} totalMs={totals.total(item.id)} />}
+          {tab === 'costs' && !(finished && clientView) && <CostsTab item={item} totalMs={totals.total(item.id)} />}
         </div>
       </main>
 
@@ -233,6 +237,22 @@ export function ItemPage() {
       {sheet === 'share' && <ShareSheet item={item} onClose={() => setSheet(null)} />}
       {sheet === 'template' && <ApplyTemplateSheet itemId={item.id} onClose={() => setSheet(null)} />}
     </div>
+  )
+}
+
+/** Discreet eye button: client view hides costs and prices on finished items (remembered on this device). */
+function ClientViewToggle() {
+  const on = useClientView()
+  return (
+    <button
+      onClick={() => { setClientView(!on); toast(on ? t('client.offToast') : t('client.onToast')) }}
+      aria-pressed={on}
+      aria-label={on ? t('client.turnOff') : t('client.turnOn')}
+      title={on ? t('client.turnOff') : t('client.turnOn')}
+      className={cx('inline-flex h-9 w-9 items-center justify-center rounded-full transition', on ? 'bg-accent-soft text-accent-strong' : 'text-muted hover:bg-surface-2')}
+    >
+      {on ? <EyeOff size={17} /> : <Eye size={17} />}
+    </button>
   )
 }
 

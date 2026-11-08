@@ -6,7 +6,9 @@ import { useApp, childrenOf } from '../store/app'
 import { useCoverFor, useMediaUrl, useTotals } from '../lib/hooks'
 import { fmtDuration } from '../lib/time'
 import { Lightbox, NoteBadge } from './MediaGrid'
-import { NotesTab } from './Tabs'
+import { CostsTab, NotesTab, TimeLogTab } from './Tabs'
+import { setClientView, useClientView } from '../lib/clientView'
+import { Eye, X } from 'lucide-react'
 import { ItemPress } from './ItemMenu'
 import { Thumb } from './Tile'
 import { cx } from './ui'
@@ -61,7 +63,10 @@ export function FinishedView({ item }: { item: Item }) {
   const totals = useTotals()
   const covers = useCoverFor()
   const [open, setOpen] = useState<number | null>(null)
-  const [tab, setTab] = useState<'gallery' | 'notes'>('gallery')
+  const [tab, setTab] = useState<'gallery' | 'notes' | 'log' | 'costs'>('gallery')
+  const client = useClientView()
+  const tabs = (['gallery', 'notes', 'log', 'costs'] as const).filter((x) => !(client && x === 'costs'))
+  const shownTab = client && tab === 'costs' ? 'gallery' : tab
   const kids = useMemo(() => childrenOf(items, item.id), [items, item.id])
   // finished pieces first, then the process shots; oldest first within each
   const media = useMemo(
@@ -75,24 +80,34 @@ export function FinishedView({ item }: { item: Item }) {
       <header className="pb-6 pt-2 text-center sm:pt-6">
         <h1 dir="auto" className="font-display text-[34px] font-semibold leading-tight [overflow-wrap:anywhere] sm:text-5xl">{item.title}</h1>
         {line && <p className="mt-2 text-[13px] text-muted">{line}</p>}
-        {/* two light tabs: the pictures, and the item's notes */}
-        <div className="mt-5 inline-flex rounded-full bg-surface-2 p-1" role="tablist">
-          {(['gallery', 'notes'] as const).map((tb) => (
+        {client && (
+          <div className="mt-3 flex justify-center">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-line py-0.5 pl-2.5 pr-1 text-[12px] text-muted">
+              <Eye size={13} /> {t('client.on')}
+              <button onClick={() => setClientView(false)} aria-label={t('client.turnOff')} title={t('client.turnOff')} className="inline-flex h-5 w-5 items-center justify-center rounded-full hover:bg-surface-2"><X size={12} /></button>
+            </span>
+          </div>
+        )}
+        {/* light tabs: pictures, notes, time and (unless in client view) costs */}
+        <div className="no-scrollbar mt-4 inline-flex max-w-full overflow-x-auto rounded-full bg-surface-2 p-1" role="tablist">
+          {tabs.map((tb) => (
             <button
               key={tb}
               role="tab"
-              aria-selected={tab === tb}
+              aria-selected={shownTab === tb}
               onClick={() => setTab(tb)}
-              className={cx('h-8 rounded-full px-4 text-[14px] transition', tab === tb ? 'bg-surface font-medium text-ink shadow-sm' : 'text-muted')}
+              className={cx('h-8 shrink-0 rounded-full px-3.5 text-[14px] transition', shownTab === tb ? 'bg-surface font-medium text-ink shadow-sm' : 'text-muted')}
             >
-              {t(tb === 'gallery' ? 'tabs.gallery' : 'tabs.notes')}
+              {t(tb === 'gallery' ? 'tabs.gallery' : tb === 'notes' ? 'tabs.notes' : tb === 'log' ? 'tabs.log' : 'tabs.costs')}
             </button>
           ))}
         </div>
       </header>
 
-      {tab === 'notes' && <div className="mx-auto max-w-2xl"><NotesTab item={item} /></div>}
-      {tab === 'gallery' && <>
+      {shownTab === 'notes' && <div className="mx-auto max-w-2xl"><NotesTab item={item} /></div>}
+      {shownTab === 'log' && <div className="mx-auto max-w-2xl"><TimeLogTab item={item} hasChildren={kids.length > 0} /></div>}
+      {shownTab === 'costs' && <div className="mx-auto max-w-2xl"><CostsTab item={item} totalMs={totals.total(item.id)} /></div>}
+      {shownTab === 'gallery' && <>
 
       {kids.length > 0 && (
         <div className="mb-8 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
