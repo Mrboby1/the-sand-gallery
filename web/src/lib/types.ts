@@ -108,6 +108,10 @@ export interface Settings {
   notify_enabled: boolean
   /** "Still working?" reminder every N hours while a timer runs; 0 = off. */
   reminder_hours: number
+  /** Colour hues 0-360 chosen in Settings > Appearance; null = original colours. */
+  hg_hue: number | null
+  sand_hue: number | null
+  bg_hue: number | null
   updated_at?: ISODate
 }
 
@@ -157,6 +161,9 @@ export const DEFAULT_SETTINGS: Settings = {
   due_dates_enabled: false,
   notify_enabled: true,
   reminder_hours: 2,
+  hg_hue: null,
+  sand_hue: null,
+  bg_hue: null,
 }
 
 export const DEFAULT_STATUSES: Pick<Status, 'name' | 'color' | 'is_finished'>[] = [

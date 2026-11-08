@@ -95,6 +95,12 @@ Settings > Appearance > Style: Flat (default), Glossy (3D) and 2D (Gabi's sketch
 muted colours; `Hourglass2D` in `src/components/Hourglass.tsx`). All keep the same grains: fading in above the
 glass, fading out below it, frozen when paused.
 
+### Colours
+Settings > Appearance > Colours: hue sliders for the hourglass (glass/outline), the sand and the app background,
+saved per user in `settings` (`hg_hue`, `sand_hue`, `bg_hue`; null = original colours) so they sync across devices.
+`src/lib/customColors.ts` turns a hue into CSS variables for the current theme with fixed lightness/saturation, so
+text keeps its contrast (surfaces and borders are derived from the background hue). Works with all three styles.
+
 ### Wake-up
 Free Supabase projects pause after 7 idle days (the daily cron should prevent it). If the app cannot reach the DB it
 asks the Worker; a paused project shows the banner "Your gallery is asleep 💤 Wake up", which calls `/api/wake` and

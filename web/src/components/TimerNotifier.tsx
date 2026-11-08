@@ -4,6 +4,7 @@ import { useRunning } from '../lib/hooks'
 import { alreadyAsked, clearTimer, ensurePush, permission, requestNotifications, showTimer, takePendingStop } from '../lib/notify'
 import { confirmDialog } from './ui'
 import { t } from '../i18n'
+import { applyColors } from '../lib/customColors'
 
 // First timer start on a device: explain, then ask for notification permission (inside the tap).
 setTimerStartHook(() => {
@@ -23,6 +24,10 @@ export function TimerNotifier() {
   const item = useApp((s) => (running ? s.data.items.find((i) => i.id === running.item_id) : undefined))
   const enabled = useApp((s) => s.data.settings.notify_enabled)
   const phase = useApp((s) => s.phase)
+  const hg = useApp((s) => s.data.settings.hg_hue ?? null)
+  const sand = useApp((s) => s.data.settings.sand_hue ?? null)
+  const bg = useApp((s) => s.data.settings.bg_hue ?? null)
+  useEffect(() => { if (phase === 'ready') applyColors({ hg_hue: hg, sand_hue: sand, bg_hue: bg }) }, [phase, hg, sand, bg])
 
   useEffect(() => {
     if (phase !== 'ready') return

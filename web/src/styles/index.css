@@ -31,7 +31,7 @@
   --sg-ink: #2a2017;
   --sg-muted: #6b5b49;
   --sg-accent: #b9782f;
-  --sg-accent-strong: #94591c;
+  --sg-accent-strong: #865016;
   --sg-accent-soft: #f4e3c6;
   --sg-primary: #94591c;
   --sg-on-primary: #ffffff;
@@ -105,6 +105,10 @@ body {
 /* 2D hourglass style: darker, muted lines and sand (the rest of the app looks like Flat) */
 :root { --hg2-wall: #3b342d; --hg2-sand: #a8792e; }
 [data-theme="dark"] { --hg2-wall: #b8ad9e; --hg2-sand: #c2924a; }
+
+/* hue sliders: a round, outlined thumb on a rainbow track */
+.hue-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; border-radius: 9999px; background: #fff; border: 2px solid var(--sg-ink); box-shadow: 0 1px 3px rgb(0 0 0 / 0.3); }
+.hue-slider::-moz-range-thumb { width: 22px; height: 22px; border-radius: 9999px; background: #fff; border: 2px solid var(--sg-ink); }
 
 .gloss-only { display: none; }
 [data-style="glossy"] .gloss-only { display: revert; }

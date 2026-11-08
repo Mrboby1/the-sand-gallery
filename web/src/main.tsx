@@ -4,8 +4,10 @@ import './styles/index.css'
 import { applyTheme } from './lib/theme'
 import App from './App'
 import { setupUpdates } from './lib/updates'
+import { applyColors } from './lib/customColors'
 
 applyTheme()
+applyColors() // last used colours, before the data loads
 if (!location.pathname.startsWith('/s/')) setupUpdates()
 
 createRoot(document.getElementById('root')!).render(

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { applyColors, type CustomColors } from '../lib/customColors'
+import { Hourglass } from '../components/Hourglass'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { ArrowDown, ArrowUp, Bell, Check, Copy, DatabaseBackup, LogOut, Pencil, Plus, Trash2 } from 'lucide-react'
@@ -128,6 +130,7 @@ export function SettingsPage() {
               onChange={(v) => setStyle(v as StylePref)}
             />
           </div>
+          <ColorControls />
         </Section>
 
         <NotificationsSection />
@@ -162,7 +165,7 @@ export function SettingsPage() {
 
         <Section title={t('settings.account')}>
           <div className="flex items-center gap-3">
-            {user?.avatar_url ? <img src={user.avatar_url} alt="" className="h-11 w-11 rounded-full" referrerPolicy="no-referrer" /> : <div className="flex h-11 w-11 items-center justify-center rounded-full bg-accent-soft font-display text-lg font-semibold text-accent-strong">{(user?.name ?? user?.email ?? '?')[0]?.toUpperCase()}</div>}
+            {user?.avatar_url ? <img src={user.avatar_url} alt="" className="h-11 w-11 rounded-full" referrerPolicy="no-referrer" /> : <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary font-display text-lg font-semibold text-on-primary">{(user?.name ?? user?.email ?? '?')[0]?.toUpperCase()}</div>}
             <div className="min-w-0 flex-1">
               <div className="truncate font-medium">{user?.name ?? user?.email}</div>
               <div className="truncate text-[13px] text-muted">{user?.email}</div>
@@ -263,6 +266,70 @@ function NotificationsSection() {
         </Button>
       </div>
     </Section>
+  )
+}
+
+/** Hue sliders for the hourglass, the sand and the app background, with a live preview and reset. */
+function ColorControls() {
+  const s = useApp((st) => st.data.settings)
+  const [draft, setDraft] = useState<CustomColors>({ hg_hue: s.hg_hue ?? null, sand_hue: s.sand_hue ?? null, bg_hue: s.bg_hue ?? null })
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const dark = document.documentElement.dataset.theme === 'dark'
+  const latest = useRef(draft)
+  const set = (patch: Partial<CustomColors>) => {
+    const next = { ...latest.current, ...patch }
+    latest.current = next
+    setDraft(next)
+    applyColors(next) // live preview
+    clearTimeout(timer.current)
+    // save all three together (a later slider must not drop an earlier one)
+    timer.current = setTimeout(() => void saveSettings({ ...latest.current }), 500)
+  }
+  const rows: { key: keyof CustomColors; label: string; def: number; light: [number, number]; darkSL: [number, number] }[] = [
+    { key: 'hg_hue', label: t('colors.hourglass'), def: 29, light: [38, 27], darkSL: [32, 72] },
+    { key: 'sand_hue', label: t('colors.sand'), def: 32, light: [62, 57], darkSL: [62, 60] },
+    { key: 'bg_hue', label: t('colors.background'), def: 36, light: [42, 90], darkSL: [18, 12] },
+  ]
+  return (
+    <div className="mt-5 border-t border-line pt-4">
+      <div className="flex items-center gap-4">
+        <div className="flex h-24 w-20 shrink-0 items-center justify-center rounded-2xl bg-bg"><Hourglass running size={44} /></div>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">{t('colors.title')}</div>
+          <div className="text-[13px] text-muted">{t('colors.hint')}</div>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-col gap-3">
+        {rows.map((r) => {
+          const v = draft[r.key]
+          const [sat, light] = dark ? r.darkSL : r.light
+          const track = `linear-gradient(to right, ${[0, 60, 120, 180, 240, 300, 360].map((h) => `hsl(${h} ${Math.max(sat, 45)}% ${dark ? 55 : 55}%)`).join(', ')})`
+          return (
+            <div key={r.key} className="flex items-center gap-3">
+              <span className="w-24 shrink-0 text-sm">{r.label}</span>
+              <span className="h-6 w-6 shrink-0 rounded-full border border-line" style={{ background: v === null ? undefined : `hsl(${v} ${sat}% ${light}%)` }} />
+              <input
+                type="range"
+                min={0}
+                max={359}
+                value={v ?? r.def}
+                aria-label={r.label}
+                onChange={(e) => set({ [r.key]: Number(e.target.value) } as Partial<CustomColors>)}
+                className="hue-slider h-6 min-w-0 flex-1 cursor-pointer appearance-none rounded-full"
+                style={{ background: track, opacity: v === null ? 0.55 : 1 }}
+              />
+              <button
+                onClick={() => set({ [r.key]: null } as Partial<CustomColors>)}
+                disabled={v === null}
+                className="h-8 shrink-0 rounded-full px-2.5 text-[12px] text-muted transition hover:bg-surface-2 disabled:opacity-35"
+              >
+                {t('colors.reset')}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
