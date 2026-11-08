@@ -6,7 +6,7 @@ import {
   signOut, toast, updateStatus, updateTemplate,
 } from '../store/app'
 import type { Template, TemplateNode } from '../lib/types'
-import { getTheme, setTheme, type ThemePref } from '../lib/theme'
+import { getTheme, setStyle, setTheme, useStyle, type StylePref, type ThemePref } from '../lib/theme'
 import { TopBar } from '../components/Shell'
 import { Button, Field, IconButton, Input, Sheet, Switch, confirmDialog, cx } from '../components/ui'
 import { useMoney } from '../components/Tabs'
@@ -30,6 +30,7 @@ export function SettingsPage() {
   const user = useApp((s) => s.user)
   const s = data.settings
   const [theme, setThemeState] = useState<ThemePref>(getTheme())
+  const style = useStyle()
   const [editTpl, setEditTpl] = useState<Template | 'new' | null>(null)
   const money = useMoney()
   const statuses = [...data.statuses].sort((a, b) => a.sort_order - b.sort_order)
@@ -103,6 +104,17 @@ export function SettingsPage() {
               value={theme}
               options={(['system', 'light', 'dark'] as ThemePref[]).map((v) => ({ v, l: t(`settings.theme.${v}`) }))}
               onChange={(v) => { setTheme(v as ThemePref); setThemeState(v as ThemePref) }}
+            />
+          </div>
+          <div className="mt-4 flex items-center justify-between gap-4">
+            <span>
+              <span className="block font-medium">{t('settings.style')}</span>
+              <span className="block text-[13px] text-muted">{t('settings.styleHint')}</span>
+            </span>
+            <Segmented
+              value={style}
+              options={(['flat', 'glossy'] as StylePref[]).map((v) => ({ v, l: t(`settings.style.${v}`) }))}
+              onChange={(v) => setStyle(v as StylePref)}
             />
           </div>
         </Section>

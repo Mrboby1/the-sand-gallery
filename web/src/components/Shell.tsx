@@ -1,6 +1,8 @@
 import { type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, RefreshCw, Search, Settings as SettingsIcon, WifiOff, X } from 'lucide-react'
+import { ArrowLeft, Moon, RefreshCw, Search, Settings as SettingsIcon, Sun, WifiOff, X } from 'lucide-react'
+import { useState } from 'react'
+import { setTheme } from '../lib/theme'
 import { useApp, checkHealth, dismissToast, wakeUp } from '../store/app'
 import { Hourglass } from './Hourglass'
 import { Button, IconButton, cx } from './ui'
@@ -29,9 +31,24 @@ export function TopBar({ back, title, children, crumbs }: { back?: string | true
   )
 }
 
+function ThemeToggle() {
+  const [dark, setDark] = useState(() => document.documentElement.dataset.theme === 'dark')
+  return (
+    <button
+      aria-label={dark ? t('settings.theme.light') : t('settings.theme.dark')}
+      title={dark ? t('settings.theme.light') : t('settings.theme.dark')}
+      onClick={() => { const next = !dark; setTheme(next ? 'dark' : 'light'); setDark(next) }}
+      className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-surface-2"
+    >
+      {dark ? <Sun size={20} /> : <Moon size={20} />}
+    </button>
+  )
+}
+
 export function HeaderActions() {
   return (
     <>
+      <ThemeToggle />
       <Link to="/search" aria-label={t('nav.search')} className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-surface-2"><Search size={20} /></Link>
       <Link to="/settings" aria-label={t('nav.settings')} className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-surface-2"><SettingsIcon size={20} /></Link>
     </>

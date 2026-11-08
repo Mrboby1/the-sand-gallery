@@ -8,6 +8,7 @@ export function Login() {
   const [busy, setBusy] = useState(false)
   return (
     <div className="relative flex min-h-full flex-col items-center justify-center overflow-hidden px-6 py-16 text-center">
+      <div className="gloss-only pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_35%,var(--sg-accent-soft),transparent_60%)]" />
       <div className="rise relative flex flex-col items-center">
         <Hourglass running size={120} />
         <h1 className="mt-8 font-display text-[42px] font-semibold leading-none tracking-tight sm:text-5xl">{t('app.name')}</h1>

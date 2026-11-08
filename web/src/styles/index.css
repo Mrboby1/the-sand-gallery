@@ -77,6 +77,32 @@ body {
 .safe-top { padding-top: env(safe-area-inset-top); }
 .tabular { font-variant-numeric: tabular-nums; }
 
+/* ---------- Glossy style (optional; flat is the default) ---------- */
+:root { --glass-1: rgb(255 255 255 / 0.55); --glass-2: rgb(220 200 170 / 0.25); }
+[data-theme="dark"] { --glass-1: rgb(255 240 220 / 0.10); --glass-2: rgb(255 230 190 / 0.04); }
+[data-style="glossy"] {
+  --shadow-tile: 0 1px 2px rgb(60 40 20 / 0.06), 0 6px 20px -8px rgb(60 40 20 / 0.18);
+  --shadow-lift: 0 2px 4px rgb(60 40 20 / 0.08), 0 18px 40px -12px rgb(60 40 20 / 0.32);
+  --glass-line: #8a6a48;
+  --rim: #7a5634;
+}
+[data-style="glossy"][data-theme="dark"] {
+  --shadow-tile: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -10px rgb(0 0 0 / 0.6);
+  --glass-line: #c9a77e;
+  --rim: #c08a52;
+}
+.gloss-only { display: none; }
+[data-style="glossy"] .gloss-only { display: revert; }
+[data-style="glossy"] .flat-only { display: none; }
+[data-style="glossy"] .sand-texture {
+  background-image:
+    radial-gradient(circle at 20% 30%, rgb(185 120 47 / 0.10) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 70% 60%, rgb(185 120 47 / 0.08) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 40% 80%, rgb(120 80 40 / 0.07) 0 1px, transparent 1.5px),
+    linear-gradient(160deg, var(--sg-accent-soft), var(--sg-surface-2));
+  background-size: 9px 9px, 13px 13px, 7px 7px, 100% 100%;
+}
+
 /* Flat placeholder for tiles without a photo */
 .sand-texture { background-color: var(--sg-surface-2); }
 

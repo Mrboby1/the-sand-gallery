@@ -80,6 +80,7 @@ export function FullscreenTimer({ itemId, onClose }: { itemId: string; onClose: 
 
   return createPortal(
     <div className="fade fixed inset-0 z-[60] flex flex-col items-center justify-center bg-bg px-6 safe-top safe-bottom">
+      <div className="gloss-only pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--sg-accent-soft),transparent_65%)] opacity-80" />
       <IconButton label={t('timer.close')} onClick={onClose} className="absolute right-4 top-[calc(1rem+env(safe-area-inset-top))]"><X size={22} /></IconButton>
       <div className="relative flex flex-col items-center">
         <Hourglass running={ticking} size={size * 0.75} />
@@ -112,7 +113,7 @@ export function RunningChip() {
   if (onItemPage) return null
   const isItemRoute = loc.pathname.startsWith('/i/')
   return (
-    <div className={cx('pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4', isItemRoute ? 'bottom-[calc(4.25rem+env(safe-area-inset-bottom))]' : 'bottom-[calc(1rem+env(safe-area-inset-bottom))]')}>
+    <div className={cx('pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4', isItemRoute ? 'bottom-[calc(4.25rem+env(safe-area-inset-bottom))]' : 'bottom-[calc(1.5rem+env(safe-area-inset-bottom))] justify-start pr-24 sm:justify-center sm:pr-4')}>
       <div className="rise pointer-events-auto flex max-w-md items-center gap-2 rounded-full bg-[#2a2017] py-1.5 pl-2 pr-1.5 text-[#f3e9da] shadow-lift dark:bg-[#f3e9da] dark:text-[#2a2017]">
         <Link to={`/i/${item.id}`} className="flex min-w-0 items-center gap-2 [--glass-line:#e8c79a] [--rim:#e8c79a] dark:[--glass-line:#7a5634] dark:[--rim:#7a5634]">
           <Hourglass running size={20} detail="lite" />

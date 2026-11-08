@@ -26,6 +26,9 @@ export function Hourglass({
   const clip = `hg-clip-${uid}`
   const fadeIn = `hg-fin-${uid}`
   const fadeOut = `hg-fout-${uid}`
+  const sand = `hg-sand-${uid}`
+  const glass = `hg-glass-${uid}`
+  const glow = `hg-glowg-${uid}`
   const full = detail === 'full'
   const top = full ? -38 : 0
   const height = full ? 238 : 160
@@ -94,14 +97,36 @@ export function Hourglass({
           <stop offset={full ? '0.55' : '0.8'} stopColor="var(--sand-2)" stopOpacity="0.9" />
           <stop offset="1" stopColor="var(--sand-2)" stopOpacity="0" />
         </linearGradient>
+        <linearGradient id={sand} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="var(--sand-1)" />
+          <stop offset="0.55" stopColor="var(--sand-2)" />
+          <stop offset="1" stopColor="var(--sand-3)" />
+        </linearGradient>
+        <linearGradient id={glass} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stopColor="var(--glass-1)" />
+          <stop offset="0.5" stopColor="var(--glass-2)" />
+          <stop offset="1" stopColor="var(--glass-1)" />
+        </linearGradient>
+        <radialGradient id={glow} cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0" stopColor="var(--sand-1)" stopOpacity="0.9" />
+          <stop offset="1" stopColor="var(--sand-1)" stopOpacity="0" />
+        </radialGradient>
       </defs>
 
-            {/* glass body */}
-      <path d={interior} fill="var(--glass-fill)" />
+      {/* glossy style only: warm glow while running */}
+      {running && <ellipse className="glow gloss-only" cx="60" cy="80" rx="48" ry="70" fill={`url(#${glow})`} />}
+
+      {/* glass body: flat fill, or a glassy gradient in the glossy style */}
+      <path className="flat-only" d={interior} fill="var(--glass-fill)" />
+      <path className="gloss-only" d={interior} fill={`url(#${glass})`} />
 
       {/* the pile in the upper bulb */}
       <g clipPath={`url(#${clip})`}>
-        <path className="surface" d="M 0 38 Q 60 62 120 38 L 120 84 L 0 84 Z" fill="var(--sand-2)" />
+        <path className="surface flat-only" d="M 0 38 Q 60 62 120 38 L 120 84 L 0 84 Z" fill="var(--sand-2)" />
+        <g className="gloss-only">
+          <path className="surface" d="M 0 38 Q 60 62 120 38 L 120 84 L 0 84 Z" fill={`url(#${sand})`} />
+          <path d="M 30 44 Q 60 58 90 44" fill="none" stroke="var(--sand-1)" strokeOpacity="0.7" strokeWidth="1.2" />
+        </g>
       </g>
 
       {/* streams: pouring in from above, and from the neck out of the bottom and away */}
@@ -139,6 +164,11 @@ export function Hourglass({
         strokeWidth="2.2"
         strokeLinecap="round"
       />
+      {/* glossy style only: shine on the glass */}
+      <g className="gloss-only">
+        <path d="M 33 26 C 33 46 44 58 51 66" fill="none" stroke="white" strokeOpacity="0.55" strokeWidth="2" strokeLinecap="round" />
+        <path d="M 33 134 C 33 116 42 104 49 97" fill="none" stroke="white" strokeOpacity="0.35" strokeWidth="1.6" strokeLinecap="round" />
+      </g>
 
       {/* open rims, top and bottom */}
       <ellipse cx="60" cy="18" rx="35" ry="6" fill="none" stroke="var(--rim)" strokeWidth="3.2" />

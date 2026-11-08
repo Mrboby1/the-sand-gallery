@@ -6,6 +6,7 @@ import { fmtDuration } from '../lib/time'
 import { HourglassGlyph } from './Hourglass'
 import { StatusPill } from './StatusPill'
 import { cx } from './ui'
+import { useStyle } from '../lib/theme'
 import { tn } from '../i18n'
 
 export function Thumb({ media, className, alt = '' }: { media: Media | null; className?: string; alt?: string }) {
@@ -20,7 +21,15 @@ export function fmtDue(d: string) {
   return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 }
 
-export function ItemTile({
+type TileProps = Parameters<typeof GlossyItemTile>[0]
+
+/** Gallery tile: flat (photo + caption below) by default, or the glossy overlay style. */
+export function ItemTile(props: TileProps) {
+  const style = useStyle()
+  return style === 'glossy' ? <GlossyItemTile {...props} /> : <FlatItemTile {...props} />
+}
+
+function FlatItemTile({
   item, status, cover, total, running, ticking, kids, mediaCount, size = 'm', showDue,
 }: {
   item: Item; status?: Status | null; cover: Media | null; total: number; running: boolean; ticking: boolean
@@ -67,6 +76,59 @@ export function ItemTile({
             {kids === 0 && mediaCount > 0 && size === 'l' && <span>{tn('item.media', mediaCount)}</span>}
           </div>
         )}
+      </div>
+    </Link>
+  )
+}
+
+function GlossyItemTile({
+  item, status, cover, total, running, ticking, kids, mediaCount, size = 'm', showDue,
+}: {
+  item: Item; status?: Status | null; cover: Media | null; total: number; running: boolean; ticking: boolean
+  kids: number; mediaCount: number; size?: 's' | 'm' | 'l'; showDue: boolean
+}) {
+  const overdue = item.due_date && new Date(item.due_date + 'T23:59:59') < new Date()
+  return (
+    <Link
+      to={`/i/${item.id}`}
+      className="group rise relative block overflow-hidden rounded-2xl bg-surface shadow-tile ring-1 ring-line/60 transition duration-300 hover:-translate-y-0.5 hover:shadow-lift focus-visible:outline-2 focus-visible:outline-accent"
+    >
+      <div className={cx('relative overflow-hidden', size === 's' ? 'aspect-square' : 'aspect-[4/5]')}>
+        <Thumb media={cover} alt={item.title} className="absolute inset-0 h-full w-full transition duration-500 group-hover:scale-[1.03]" />
+        {!cover && (
+          <div className="absolute inset-0 flex items-center justify-center text-accent/50">
+            <Layers size={size === 's' ? 26 : 38} strokeWidth={1.4} />
+          </div>
+        )}
+        {cover?.kind === 'video' && (
+          <span className="absolute right-2 top-2 rounded-full bg-black/45 p-1.5 text-white backdrop-blur"><Film size={13} /></span>
+        )}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-[#1a120a]/80 via-[#1a120a]/25 to-transparent" />
+        {status && size !== 's' && <StatusPill status={status} size="xs" className="absolute left-2.5 top-2.5 shadow-sm" />}
+        <div className="absolute inset-x-0 bottom-0 p-3 text-white">
+          <div className={cx('font-display font-semibold leading-tight drop-shadow-sm', size === 's' ? 'line-clamp-2 text-[13px]' : size === 'm' ? 'line-clamp-2 text-[17px]' : 'line-clamp-2 text-xl')}>
+            {item.title}
+          </div>
+          {size !== 's' && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-white/85">
+              {(total > 0 || ticking) && (
+                <span className={cx('inline-flex items-center gap-1 tabular', ticking && 'text-[#ffd59a]')}>
+                  <span className="[--glass-line:#fff] [--rim:#fff]"><HourglassGlyph size={10} running={ticking} /></span>
+                  {fmtDuration(total)}
+                </span>
+              )}
+              {kids > 0 && <span>{tn('item.subitems', kids)}</span>}
+              {showDue && item.due_date && (
+                <span className={cx('inline-flex items-center gap-1', overdue && 'text-[#ffb4a8]')}>
+                  <CalendarDays size={12} /> {fmtDue(item.due_date)}
+                </span>
+              )}
+              {kids === 0 && mediaCount > 0 && size === 'l' && <span>{tn('item.media', mediaCount)}</span>}
+            </div>
+          )}
+        </div>
+        {running && <span className="absolute right-2.5 top-2.5 h-2.5 w-2.5 animate-pulse rounded-full bg-[#ffcf8a] ring-4 ring-[#ffcf8a]/30" />}
+        {size === 's' && status && <span className="absolute left-2 top-2 h-2.5 w-2.5 rounded-full ring-2 ring-white/70" style={{ background: status.color }} />}
       </div>
     </Link>
   )
