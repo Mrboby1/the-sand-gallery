@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useApp, childrenOf } from '../store/app'
-import { useLocalPref, useWeekTotal, useRunning } from '../lib/hooks'
+import { useLocalPref, usePeriodTotal, useRunning, useSummaryPeriod } from '../lib/hooks'
+import { PeriodPicker } from '../components/PeriodPicker'
 import { fmtDuration } from '../lib/time'
 import { HeaderActions, TopBar } from '../components/Shell'
 import { ItemsView } from '../components/ItemsView'
@@ -17,7 +18,8 @@ export function Home() {
   const [view, setView] = useLocalPref<ViewMode>('sg.view.home', 'grid-m')
   const [tag, setTag] = useState<string | null>(null)
   const [newOpen, setNewOpen] = useState(false)
-  const week = useWeekTotal()
+  const period = useSummaryPeriod()
+  const worked = usePeriodTotal(period)
   const running = useRunning()
   const tags = useMemo(() => allTags(items), [items])
   const shown = useMemo(() => {
@@ -41,7 +43,7 @@ export function Home() {
             <h1 className="font-display text-[32px] font-semibold leading-tight sm:text-4xl">{t('home.title')}</h1>
             <div className="mt-1.5 inline-flex items-center gap-2 text-[15px] text-muted">
               <HourglassGlyph size={13} running={!!running} />
-              <span>{t('home.week')}: <span className="font-semibold text-ink tabular">{fmtDuration(week)}</span></span>
+              <span><PeriodPicker />: <span className="font-semibold text-ink tabular">{fmtDuration(worked)}</span></span>
             </div>
           </div>
           <AddMenu parentId={null} />

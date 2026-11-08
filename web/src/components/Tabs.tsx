@@ -5,7 +5,8 @@ import type { Item, Note, Session } from '../lib/types'
 import {
   useApp, addCost, addNote, addSession, deleteCost, deleteNote, deleteSession, descendantIds, updateCost, updateNote, updateSession,
 } from '../store/app'
-import { useNow, useRunning, useWeekTotal } from '../lib/hooks'
+import { useNow, usePeriodTotal, useRunning, useSummaryPeriod } from '../lib/hooks'
+import { PeriodPicker } from './PeriodPicker'
 import { fmtDuration, MS_HOUR, sessionMs, toLocalInput } from '../lib/time'
 import { Button, Field, IconButton, Input, Sheet, Switch, confirmDialog, cx } from './ui'
 import { HourglassGlyph } from './Hourglass'
@@ -130,7 +131,8 @@ export function TimeLogTab({ item, hasChildren }: { item: Item; hasChildren: boo
     if (includeSub) for (const d of descendantIds(items, item.id)) ids.add(d)
     return ids
   }, [items, item.id, includeSub])
-  const week = useWeekTotal(scope)
+  const period = useSummaryPeriod()
+  const worked = usePeriodTotal(period, scope)
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
   const list = sessions.filter((s) => scope.has(s.item_id)).sort((a, b) => b.started_at.localeCompare(a.started_at))
   const allTime = list.reduce((n, s) => n + sessionMs(s, now), 0)
@@ -149,8 +151,8 @@ export function TimeLogTab({ item, hasChildren }: { item: Item; hasChildren: boo
       <div className="mb-4 flex flex-wrap items-center gap-3 rounded-3xl bg-accent-soft px-5 py-4">
         <HourglassGlyph size={22} running={!!running && scope.has(running.item_id)} />
         <div className="min-w-0 flex-1">
-          <div className="font-display text-lg font-semibold">{t('log.week', { time: fmtDuration(week) })}</div>
-          <div className="text-[13px] text-muted">{t('log.total')}: {fmtDuration(allTime)}</div>
+          <div className="font-display text-lg font-semibold"><PeriodPicker />: <span className="tabular">{fmtDuration(worked)}</span></div>
+          {period !== 'all' && <div className="text-[13px] text-muted">{t('log.total')}: {fmtDuration(allTime)}</div>}
         </div>
         <Button size="sm" variant="primary" onClick={() => setEditing('new')}><Plus size={16} /> {t('log.add')}</Button>
       </div>

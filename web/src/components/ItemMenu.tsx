@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { create } from 'zustand'
 import {
-  CalendarDays, Clock, Copy, FolderInput, Image as ImageIcon, LayoutTemplate, Link2, MoreVertical, Pause, Pencil, Play, Tag,
+  CalendarDays, Copy, FolderInput, Image as ImageIcon, LayoutTemplate, Link2, MoreVertical, Pause, Pencil, Play, Tag,
   Trash2, CircleDot, X,
 } from 'lucide-react'
 import {
@@ -126,7 +126,6 @@ export function ItemMenuHost() {
     { key: 'rename', icon: <Pencil size={17} />, label: t('item.rename'), run: async () => { closeMenu(); const v = await promptDialog(t('item.rename'), item.title); if (v) void updateItem(item.id, { title: v }) } },
     { key: 'status', icon: <CircleDot size={17} />, label: t('menu.status'), run: () => openSub('status') },
     { key: 'tags', icon: <Tag size={17} />, label: t('menu.tags'), run: () => openSub('tags') },
-    { key: 'time', icon: <Clock size={17} />, label: t('menu.time'), run: () => { closeMenu(); nav(`/i/${item.id}?tab=log&add=1`) } },
     { key: 'timer', icon: isRunning ? <Pause size={17} /> : <Play size={17} />, label: isRunning ? t('menu.stopTimer') : t('menu.startTimer'), run: () => { closeMenu(); void (isRunning ? stopTimer() : startTimer(item.id)) } },
     ...(dueOn ? [{ key: 'due', icon: <CalendarDays size={17} />, label: item.due_date ? t('menu.dueChange') : t('menu.dueSet'), run: () => openSub('due') }] : []),
     { key: 'cover', icon: <ImageIcon size={17} />, label: t('menu.cover'), run: () => openSub('cover'), disabled: !media.length },

@@ -119,7 +119,7 @@ export function Sheet({ open, onClose, title, children, wide }: { open: boolean;
 }
 
 /** Small anchored popover menu. */
-export function Menu({ trigger, children, align = 'right' }: { trigger: (open: () => void) => ReactNode; children: (close: () => void) => ReactNode; align?: 'left' | 'right' }) {
+export function Menu({ trigger, children, align = 'right', inline = false }: { trigger: (open: () => void) => ReactNode; children: (close: () => void) => ReactNode; align?: 'left' | 'right'; inline?: boolean }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -131,7 +131,7 @@ export function Menu({ trigger, children, align = 'right' }: { trigger: (open: (
     return () => { document.removeEventListener('mousedown', h); window.removeEventListener('keydown', k) }
   }, [open])
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className={inline ? 'relative inline-block' : 'relative'}>
       {trigger(() => setOpen((o) => !o))}
       {open && (
         <div className={cx('rise absolute z-40 mt-2 min-w-52 overflow-hidden rounded-2xl border border-line bg-surface p-1.5 shadow-lift', align === 'right' ? 'right-0' : 'left-0')}>

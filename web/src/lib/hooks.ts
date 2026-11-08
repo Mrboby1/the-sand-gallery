@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp, ensureUrls, pendingAsMedia } from '../store/app'
-import { chainUp, closedTotals, overlapMs, sessionMs, startOfWeek } from './time'
-import type { Item, Media } from './types'
+import { chainUp, closedTotals, overlapMs, periodRange, sessionMs } from './time'
+import type { Item, Media, SummaryPeriod } from './types'
 
 /** Current time, re-rendering every `ms` while `active`. */
 export function useNow(active: boolean, ms = 1000): number {
@@ -45,19 +45,27 @@ export function useTotals() {
   }), [closed, live, running, now])
 }
 
-/** Time worked this week, optionally limited to a set of item ids. */
-export function useWeekTotal(itemIds?: Set<string>) {
+/** The chosen summary period (synced setting). */
+export function useSummaryPeriod(): SummaryPeriod {
+  return useApp((s) => s.data.settings.summary_period ?? 'week')
+}
+
+/**
+ * Time worked in the chosen period (today / this week / this month / all time), optionally limited to a set of item
+ * ids. Includes the running session live; ticks every 15 s while a timer runs and every minute otherwise, so the
+ * period rolls over at local midnight.
+ */
+export function usePeriodTotal(period: SummaryPeriod, itemIds?: Set<string>) {
   const sessions = useApp((s) => s.data.sessions)
   const weekStart = useApp((s) => s.data.settings.week_starts_on)
   const running = useRunning()
-  const now = useNow(!!running, 15000)
+  const now = useNow(true, running ? 15000 : 60000)
   return useMemo(() => {
-    const from = startOfWeek(new Date(now), weekStart).getTime()
-    const to = from + 7 * 86400_000
+    const [from, to] = periodRange(period, now, weekStart)
     let ms = 0
     for (const s of sessions) if (!itemIds || itemIds.has(s.item_id)) ms += overlapMs(s, from, to, now)
     return ms
-  }, [sessions, weekStart, now, itemIds])
+  }, [sessions, weekStart, now, itemIds, period])
 }
 
 /** Picks the media to show on an item's tile: its cover, else its newest photo, else a descendant's. */

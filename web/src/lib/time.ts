@@ -48,6 +48,19 @@ export function startOfWeek(d: Date, weekStartsOn: number): Date {
   return x
 }
 
+/** [from, to) of a summary period in local time (midnight, the chosen first day of the week, the 1st). */
+export function periodRange(period: 'day' | 'week' | 'month' | 'all', now: number, weekStartsOn: number): [number, number] {
+  const d = new Date(now)
+  if (period === 'all') return [0, Number.POSITIVE_INFINITY]
+  if (period === 'day') {
+    const a = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    return [a.getTime(), new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime()]
+  }
+  if (period === 'month') return [new Date(d.getFullYear(), d.getMonth(), 1).getTime(), new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime()]
+  const a = startOfWeek(d, weekStartsOn)
+  return [a.getTime(), new Date(a.getFullYear(), a.getMonth(), a.getDate() + 7).getTime()]
+}
+
 export function startOfDay(d: Date): Date {
   const x = new Date(d)
   x.setHours(0, 0, 0, 0)

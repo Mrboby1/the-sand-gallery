@@ -2,6 +2,7 @@
 
 export type UUID = string
 export type ISODate = string // timestamptz as ISO string
+export type SummaryPeriod = 'day' | 'week' | 'month' | 'all'
 
 export interface Status {
   id: UUID
@@ -127,6 +128,8 @@ export interface Settings {
   bg_hue: number | null
   /** Colour of the frozen (paused) hourglass; null = icy blue. */
   freeze_hue: number | null
+  /** Period of the "time worked" summary (home header, Time log). */
+  summary_period: SummaryPeriod
   updated_at?: ISODate
 }
 
@@ -183,6 +186,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sand_hue: null,
   bg_hue: null,
   freeze_hue: null,
+  summary_period: 'week',
 }
 
 export const DEFAULT_STATUSES: Pick<Status, 'name' | 'color' | 'is_finished'>[] = [
