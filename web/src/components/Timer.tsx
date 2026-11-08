@@ -21,7 +21,7 @@ export function TimerCard({ itemId, hasChildren, onFullscreen }: { itemId: strin
     <div className={cx('relative overflow-hidden rounded-3xl p-4 transition sm:p-5', ticking ? 'bg-accent-soft' : 'bg-surface ring-1 ring-line/70')}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <button onClick={onFullscreen} aria-label={t('timer.fullscreen')} className="shrink-0 transition active:scale-95">
-          <Hourglass running={ticking} size={58} />
+          <Hourglass running={ticking} size={50} />
         </button>
         <div className="min-w-0 flex-1">
           <div className={cx('font-display text-[38px] font-semibold leading-none tabular sm:text-[42px]', ticking && 'text-accent-strong')}>

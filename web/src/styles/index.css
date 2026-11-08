@@ -91,7 +91,7 @@ body {
 }
 
 /* ---------- Hourglass animation ---------- */
-.hg .grain { animation: hg-fall var(--d, 1.1s) linear infinite; animation-delay: var(--delay, 0s); }
+.hg .grain { animation: hg-fall var(--d, 1.1s) cubic-bezier(.45,0,.9,.6) infinite; animation-delay: var(--delay, 0s); transform-box: view-box; }
 .hg .stream { animation: hg-stream 0.5s linear infinite; }
 .hg .surface { animation: hg-breathe 2.4s ease-in-out infinite; transform-origin: 50% 50%; transform-box: fill-box; }
 .hg .glow { animation: hg-glow 2.4s ease-in-out infinite; }
@@ -100,10 +100,10 @@ body {
 .hg.paused .surface,
 .hg.paused .glow { animation-play-state: paused; }
 @keyframes hg-fall {
-  0% { transform: translateY(0); opacity: 0; }
-  12% { opacity: 1; }
-  85% { opacity: 1; }
-  100% { transform: translateY(var(--dy, 30px)); opacity: 0; }
+  0% { transform: translate(0, 0); opacity: 0; }
+  10% { opacity: 1; }
+  78% { opacity: 1; }
+  100% { transform: translate(var(--dx, 0px), var(--dy, 30px)); opacity: 0; }
 }
 @keyframes hg-stream { to { stroke-dashoffset: -6; } }
 @keyframes hg-breathe { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(0.92); } }
