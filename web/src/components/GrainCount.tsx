@@ -39,7 +39,9 @@ export function GrainCount({ totalMs, asOf, running }: { totalMs: number; asOf: 
     paint()
     if (!running) return
     let raf = 0
-    const loop = () => { paint(); raf = requestAnimationFrame(loop) }
+    let last = 0
+    // ~20 updates a second: still a smooth count, much less layout work than every frame
+    const loop = (now: number) => { if (now - last >= 50) { paint(); last = now } raf = requestAnimationFrame(loop) }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
   }, [totalMs, asOf, running])

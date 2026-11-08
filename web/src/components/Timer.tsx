@@ -71,6 +71,9 @@ export function FullscreenTimer({ itemId, onClose }: { itemId: string; onClose: 
     return () => { window.removeEventListener('resize', h); window.removeEventListener('keydown', k) }
   }, [onClose, runningHere, itemId])
 
+  // Hourglasses hidden behind this view pause their sand (see HourglassSim).
+  useEffect(() => { document.body.dataset.fsTimer = '1'; return () => { delete document.body.dataset.fsTimer } }, [])
+
   // Keep the screen on while the big timer is visible and running.
   useEffect(() => {
     if (!ticking || !('wakeLock' in navigator)) return
@@ -80,7 +83,7 @@ export function FullscreenTimer({ itemId, onClose }: { itemId: string; onClose: 
   }, [ticking])
 
   return createPortal(
-    <div className="fade fixed inset-0 z-[60] flex flex-col items-center justify-center bg-bg px-6 safe-top safe-bottom">
+    <div data-fullscreen-timer className="fade fixed inset-0 z-[60] flex flex-col items-center justify-center bg-bg px-6 safe-top safe-bottom">
       <div className="gloss-only pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--sg-accent-soft),transparent_65%)] opacity-80" />
       <IconButton label={t('timer.close')} onClick={onClose} className="absolute right-4 top-[calc(1rem+env(safe-area-inset-top))]"><X size={22} /></IconButton>
       <div className="relative flex flex-col items-center">

@@ -1,5 +1,6 @@
 import { useId } from 'react'
 import { useStyle } from '../lib/theme'
+import { HourglassSim } from './HourglassSim'
 
 /**
  * The Sand Gallery hourglass: open at BOTH ends, so it is clearly bottomless. Sand pours in from
@@ -151,6 +152,8 @@ export function Hourglass({
   detail?: 'full' | 'lite'
 }) {
   const style = useStyle()
+  // big hourglasses: real moving grains on a canvas; small glyphs keep the light CSS version
+  if (detail === 'full' && typeof window !== 'undefined' && 'Path2D' in window) return <HourglassSim style={style} running={running} size={size} className={className} title={title} />
   if (style === 'line') return <Hourglass2D running={running} size={size} className={className} title={title} detail={detail} />
   return <HourglassClassic running={running} size={size} className={className} title={title} detail={detail} />
 }
