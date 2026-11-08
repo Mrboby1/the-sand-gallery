@@ -4,7 +4,7 @@ import {
   CalendarDays, ChevronRight, Copy, FolderInput, LayoutTemplate, Link2, MoreHorizontal, Pencil, Plus, Trash2, X,
 } from 'lucide-react'
 import {
-  useApp, applyTemplate, childrenOf, deleteItem, descendantIds, duplicateItem, saveAsTemplate, updateItem,
+  useApp, childrenOf, createItem, deleteItem, descendantIds, duplicateItem, findTemplateByName, saveAsTemplate, toast, updateItem,
 } from '../store/app'
 import { useLocalPref, useTotals } from '../lib/hooks'
 import { TopBar } from '../components/Shell'
@@ -15,9 +15,9 @@ import { ViewSwitcher, type ViewMode } from '../components/ViewSwitcher'
 import { MediaSection } from '../components/MediaGrid'
 import { CostsTab, NotesTab, TimeLogTab } from '../components/Tabs'
 import { MoveSheet, NewItemSheet, ShareSheet, TagEditor } from '../components/ItemBits'
-import { Button, Empty, Menu, MenuItem, Sheet, confirmDialog, cx } from '../components/ui'
+import { Button, Empty, Menu, MenuItem, Sheet, confirmDialog, promptDialog, cx } from '../components/ui'
 import { fmtDue } from '../components/Tile'
-import { t, type MsgKey } from '../i18n'
+import { t, tn, type MsgKey } from '../i18n'
 
 type Tab = 'gallery' | 'notes' | 'log' | 'costs'
 const TABS: { id: Tab; label: MsgKey }[] = [
@@ -52,6 +52,10 @@ export function ItemPage() {
   }, [items, item])
 
   useEffect(() => { window.scrollTo({ top: 0 }) }, [id])
+  useEffect(() => {
+    document.title = item ? `${item.title} · ${t('app.name')}` : t('app.name')
+    return () => { document.title = t('app.name') }
+  }, [item?.title]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!item) {
     return (
@@ -68,16 +72,22 @@ export function ItemPage() {
   const mediaCount = media.filter((m) => scope.has(m.item_id)).length
 
   return (
-    <div className="min-h-full pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
+    <div className="min-h-full pb-[calc(9rem+env(safe-area-inset-bottom))]">
       <TopBar
         back={backTo}
         crumbs={
           <nav className="no-scrollbar flex items-center gap-1 overflow-x-auto whitespace-nowrap text-[13px] text-muted">
             <Link to="/" className="hover:text-ink">{t('nav.home')}</Link>
-            {crumbs.map((c) => (
-              <span key={c.id} className="inline-flex items-center gap-1">
+            {crumbs.length > 3 && (
+              <span className="inline-flex items-center gap-1">
                 <ChevronRight size={12} className="opacity-50" />
-                <Link to={`/i/${c.id}`} className="max-w-[9rem] truncate hover:text-ink">{c.title}</Link>
+                <Link to={`/i/${crumbs[crumbs.length - 3].id}`} title={crumbs.slice(0, -2).map((c) => c.title).join(' › ')} className="hover:text-ink">…</Link>
+              </span>
+            )}
+            {(crumbs.length > 3 ? crumbs.slice(-2) : crumbs).map((c) => (
+              <span key={c.id} className="inline-flex min-w-0 items-center gap-1">
+                <ChevronRight size={12} className="shrink-0 opacity-50" />
+                <Link to={`/i/${c.id}`} dir="auto" className="max-w-[8rem] truncate hover:text-ink">{c.title}</Link>
               </span>
             ))}
           </nav>
@@ -89,15 +99,27 @@ export function ItemPage() {
               <MenuItem icon={<Link2 size={16} />} onClick={() => { close(); setSheet('share') }}>{t('item.share')}</MenuItem>
               <MenuItem icon={<FolderInput size={16} />} onClick={() => { close(); setSheet('move') }}>{t('item.move')}</MenuItem>
               <MenuItem icon={<Copy size={16} />} onClick={async () => { close(); const nid = await duplicateItem(item.id); if (nid) nav(`/i/${nid}`) }}>{t('item.duplicate')}</MenuItem>
-              <MenuItem icon={<LayoutTemplate size={16} />} onClick={() => { close(); void saveAsTemplate(item.id) }}>{t('item.saveTemplate')}</MenuItem>
-              <MenuItem icon={<Plus size={16} />} onClick={() => { close(); setSheet('template') }}>{t('item.fromTemplate')}</MenuItem>
+              <MenuItem
+                icon={<LayoutTemplate size={16} />}
+                onClick={async () => {
+                  close()
+                  const name = await promptDialog(t('item.saveTemplate'), item.title, t('common.save'))
+                  if (!name) return
+                  const dup = findTemplateByName(name)
+                  if (dup && !(await confirmDialog(t('item.templateReplace', { name: dup.name }), { okLabel: t('item.templateReplaceOk') }))) return
+                  await saveAsTemplate(item.id, name)
+                }}
+              >
+                {t('item.saveTemplate')}
+              </MenuItem>
+              <MenuItem icon={<Plus size={16} />} onClick={() => { close(); setSheet('template') }}>{t('item.newFromTemplate')}</MenuItem>
               <div className="my-1 h-px bg-line" />
               <MenuItem
                 danger
                 icon={<Trash2 size={16} />}
                 onClick={async () => {
                   close()
-                  const ok = await confirmDialog(t('item.delete'), { body: t('item.deleteConfirm', { title: item.title, n: subtreeCount, m: mediaCount }), danger: true, okLabel: t('common.delete') })
+                  const ok = await confirmDialog(t('item.delete'), { body: t('item.deleteConfirm', { title: item.title, items: tn('item.subitems', subtreeCount), media: tn('item.media', mediaCount) }), danger: true, okLabel: t('common.delete') })
                   if (ok) { nav(backTo, { replace: true }); await deleteItem(item.id) }
                 }}
               >
@@ -149,7 +171,7 @@ export function ItemPage() {
                 </div>
                 {kids.length > 0 && <div className="mb-3 sm:hidden"><ViewSwitcher value={view} onChange={setView} /></div>}
                 {kids.length > 0 || view === 'calendar' ? (
-                  <ItemsView items={kids} view={view} scopeIds={scope} />
+                  <ItemsView items={kids} view={view} scopeIds={scope} rootId={item.id} />
                 ) : (
                   <button onClick={() => setSheet('new')} className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-line py-6 text-sm text-muted transition hover:border-accent hover:text-accent-strong">
                     <Plus size={16} /> {t('item.newSub')}
@@ -175,7 +197,7 @@ export function ItemPage() {
       </div>
 
       {full && <FullscreenTimer itemId={item.id} onClose={() => setFull(false)} />}
-      <NewItemSheet open={sheet === 'new'} onClose={() => setSheet(null)} parentId={item.id} />
+      <NewItemSheet open={sheet === 'new'} onClose={() => setSheet(null)} parentId={item.id} stay />
       {sheet === 'move' && <MoveSheet item={item} onClose={() => setSheet(null)} />}
       {sheet === 'share' && <ShareSheet item={item} onClose={() => setSheet(null)} />}
       {sheet === 'template' && <ApplyTemplateSheet itemId={item.id} onClose={() => setSheet(null)} />}
@@ -186,7 +208,24 @@ export function ItemPage() {
 function TitleEditor({ value, onSave }: { value: string; onSave: (v: string) => void }) {
   const [v, setV] = useState(value)
   const ref = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => setV(value), [value])
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const latest = useRef({ v: value, saved: value })
+  const saveRef = useRef(onSave)
+  saveRef.current = onSave
+  useEffect(() => { if (document.activeElement !== ref.current) setV(value); latest.current.saved = value }, [value])
+  // Save while typing (debounced) and when the page is hidden/closed, not only on blur/Enter.
+  useEffect(() => {
+    const flushNow = () => { clearTimeout(timer.current); const nv = latest.current.v.trim(); if (nv && nv !== latest.current.saved) { latest.current.saved = nv; saveRef.current(nv) } }
+    window.addEventListener('pagehide', flushNow)
+    document.addEventListener('visibilitychange', flushNow)
+    return () => { flushNow(); window.removeEventListener('pagehide', flushNow); document.removeEventListener('visibilitychange', flushNow) }
+  }, [])
+  const change = (nv: string) => {
+    setV(nv)
+    latest.current.v = nv
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => { const x = nv.trim(); if (x && x !== latest.current.saved) { latest.current.saved = x; saveRef.current(x) } }, 900)
+  }
   useEffect(() => {
     const el = ref.current
     if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' }
@@ -197,8 +236,9 @@ function TitleEditor({ value, onSave }: { value: string; onSave: (v: string) => 
         ref={ref}
         rows={1}
         value={v}
-        onChange={(e) => setV(e.target.value.replace(/\n/g, ''))}
-        onBlur={() => { const nv = v.trim(); if (nv && nv !== value) onSave(nv); else setV(value) }}
+        dir="auto"
+        onChange={(e) => change(e.target.value.replace(/\n/g, ''))}
+        onBlur={() => { clearTimeout(timer.current); const nv = v.trim(); if (nv && nv !== latest.current.saved) { latest.current.saved = nv; onSave(nv) } else if (!nv) setV(value) }}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLTextAreaElement).blur() } }}
         aria-label={t('item.rename')}
         className="block w-full resize-none overflow-hidden bg-transparent pr-8 font-display text-[30px] font-semibold leading-tight outline-none sm:text-[38px]"
@@ -232,16 +272,29 @@ function DueDate({ value, onChange }: { value: string | null; onChange: (v: stri
   )
 }
 
+function countTpl(n: { children?: unknown[] }[]): number {
+  return n.reduce((k, x) => k + 1 + countTpl((x.children ?? []) as { children?: unknown[] }[]), 0)
+}
+
 function ApplyTemplateSheet({ itemId, onClose }: { itemId: string; onClose: () => void }) {
   const templates = useApp((s) => s.data.templates)
+  const nav = useNavigate()
   return (
-    <Sheet open onClose={onClose} title={t('item.fromTemplate')}>
+    <Sheet open onClose={onClose} title={t('item.newFromTemplate')}>
       {!templates.length && <p className="text-sm text-muted">{t('settings.noTemplates')}</p>}
       <div className="flex flex-col gap-1">
         {templates.map((x) => (
-          <button key={x.id} onClick={() => { void applyTemplate(itemId, x.id); onClose() }} className="flex items-center justify-between rounded-xl px-3 py-3 text-left hover:bg-surface-2">
-            <span className="font-medium">{x.name}</span>
-            <span className="truncate pl-3 text-sm text-muted">{x.tree.map((n) => n.title).join(', ')}</span>
+          <button
+            key={x.id}
+            onClick={async () => {
+              onClose()
+              const nid = await createItem(itemId, '', x.id)
+              toast(t('item.createdFromTemplate', { title: x.item_title || x.name }), 'info', { label: t('share.open'), run: () => nav(`/i/${nid}`) })
+            }}
+            className="flex flex-col items-start rounded-xl px-3 py-3 text-left hover:bg-surface-2"
+          >
+            <span className="font-medium" dir="auto">{x.name}</span>
+            <span className="text-sm text-muted">{t('item.templateWillCreate', { title: x.item_title || x.name, n: countTpl(x.tree) })}</span>
           </button>
         ))}
       </div>

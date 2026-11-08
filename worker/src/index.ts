@@ -6,7 +6,9 @@
  *  POST /api/media/delete   deletes the caller's own objects                          [auth]
  *  GET  /api/share/:token   public read-only gallery for a share link (presigned media)
  *  GET  /api/health         { state: 'up' | 'asleep' | 'waking' | 'unreachable' }
- *  POST /api/wake           restores a paused Supabase project (Management API)
+ *  POST /api/wake           restores a paused Supabase project (Management API). Needs a Supabase JWT
+ *                           (verified locally against the JWKS, so it works while the DB sleeps) and is
+ *                           rate-limited; without a token only one call per 30 minutes is allowed.
  *  POST /api/backup         run the backup now (signed-in user; Settings > Back up now)
  *  cron (daily)             keep-alive + JSON backup of all tables to B2
  *
@@ -26,6 +28,8 @@ export interface Env {
   B2_KEY_ID: string
   B2_APPLICATION_KEY: string // secret
   ALLOWED_ORIGINS: string // comma separated; "*.x.pages.dev" wildcards allowed
+  SUPABASE_JWKS: string // public keys, JSON
+  RATE: KVNamespace
 }
 
 export const PREFIX = 'sand-gallery/'
@@ -92,15 +96,16 @@ function amzDate(d: Date) {
  * Presigns a URL. GETs are signed with a date fixed to the start of the UTC day (valid 2 days), so the
  * same object gets the same URL all day long and the browser/service-worker cache can hit.
  */
-export async function presign(env: Env, method: 'GET' | 'PUT', key: string, expiresSec?: number): Promise<string> {
+export async function presign(env: Env, method: 'GET' | 'PUT', key: string, expiresSec?: number, window: 'day' | 'hour' = 'day'): Promise<string> {
   if (!safeKey(key)) throw new HttpError(400, 'bad key')
   const url = objectUrl(env, key)
   let datetime: string
   if (method === 'GET') {
-    const day = new Date()
-    day.setUTCHours(0, 0, 0, 0)
-    datetime = amzDate(day)
-    url.searchParams.set('X-Amz-Expires', String(expiresSec ?? 2 * 86400))
+    const start = new Date()
+    if (window === 'day') start.setUTCHours(0, 0, 0, 0)
+    else start.setUTCMinutes(0, 0, 0)
+    datetime = amzDate(start)
+    url.searchParams.set('X-Amz-Expires', String(expiresSec ?? (window === 'day' ? 2 * 86400 : 2 * 3600)))
   } else {
     datetime = amzDate(new Date())
     url.searchParams.set('X-Amz-Expires', String(expiresSec ?? 3600))
@@ -130,6 +135,8 @@ async function requireUser(env: Env, req: Request): Promise<{ id: string; token:
   if (!token) throw new HttpError(401, 'missing token')
   const cached = userCache.get(token)
   if (cached && cached.exp > Date.now()) return { id: cached.id, token }
+  const local = await verifyJwt(env, token)
+  if (local) return { id: local.sub, token }
   const res = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, { headers: { Authorization: `Bearer ${token}`, apikey: env.SUPABASE_ANON_KEY } })
   if (!res.ok) throw new HttpError(401, 'invalid token')
   const user = (await res.json()) as { id?: string }
@@ -209,8 +216,8 @@ async function share(env: Env, token: string) {
   if (!data) return null
   const media = await Promise.all(data.media.map(async ({ object_key, thumb_key, ...m }) => ({
     ...m,
-    url: safeKey(object_key) ? await presign(env, 'GET', object_key) : '',
-    thumb_url: thumb_key && safeKey(thumb_key) ? await presign(env, 'GET', thumb_key) : null,
+    url: safeKey(object_key) ? await presign(env, 'GET', object_key, undefined, 'hour') : '',
+    thumb_url: thumb_key && safeKey(thumb_key) ? await presign(env, 'GET', thumb_key, undefined, 'hour') : null,
   })))
   return { root_id: data.root_id, items: data.items, statuses: data.statuses, media }
 }
@@ -239,6 +246,75 @@ async function health(env: Env) {
   if (status === 'INACTIVE' || status === 'PAUSED') return { state: 'asleep', status }
   if (status === 'ACTIVE_HEALTHY' || status === 'RESTORING' || status === 'COMING_UP' || status === 'UPGRADING' || status === 'RESTARTING') return { state: 'waking', status }
   return { state: 'unreachable', status }
+}
+
+// ------------------------------------------------------------------ JWT (local verification) + rate limit
+function b64urlBytes(s: string): Uint8Array {
+  const b = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4))
+  return Uint8Array.from(b, (c) => c.charCodeAt(0))
+}
+
+interface Jwk { kid?: string; kty: string; crv?: string; x?: string; y?: string; alg?: string }
+let liveJwks: { keys: Jwk[]; at: number } | null = null
+
+async function jwks(env: Env, kid: string | undefined): Promise<Jwk | undefined> {
+  const embedded = (JSON.parse(env.SUPABASE_JWKS) as { keys: Jwk[] }).keys
+  let k = embedded.find((x) => x.kid === kid)
+  if (k) return k
+  if (!liveJwks || Date.now() - liveJwks.at > 3600_000) {
+    try {
+      const res = await fetch(`${env.SUPABASE_URL}/auth/v1/.well-known/jwks.json`)
+      if (res.ok) liveJwks = { keys: ((await res.json()) as { keys: Jwk[] }).keys, at: Date.now() }
+    } catch { /* asleep: embedded keys only */ }
+  }
+  k = liveJwks?.keys.find((x) => x.kid === kid)
+  return k
+}
+
+/**
+ * Verifies a Supabase access token's ES256 signature locally. `graceSec` lets a recently expired token
+ * through (used by wake-up: the auth server sleeps too, so the browser cannot refresh its token).
+ */
+export async function verifyJwt(env: Env, token: string, graceSec = 0): Promise<{ sub: string } | null> {
+  try {
+    const [h, p, sig] = token.split('.')
+    if (!h || !p || !sig) return null
+    const header = JSON.parse(new TextDecoder().decode(b64urlBytes(h))) as { alg?: string; kid?: string }
+    if (header.alg !== 'ES256') return null
+    const jwk = await jwks(env, header.kid)
+    if (!jwk) return null
+    const key = await crypto.subtle.importKey('jwk', { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y, ext: true }, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'])
+    const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, b64urlBytes(sig), new TextEncoder().encode(`${h}.${p}`))
+    if (!ok) return null
+    const claims = JSON.parse(new TextDecoder().decode(b64urlBytes(p))) as { sub?: string; exp?: number; aud?: string | string[]; iss?: string; role?: string }
+    const aud = Array.isArray(claims.aud) ? claims.aud : [claims.aud]
+    if (!aud.includes('authenticated') || claims.role !== 'authenticated') return null
+    if (claims.iss && claims.iss !== `${env.SUPABASE_URL}/auth/v1`) return null
+    if (!claims.exp || claims.exp + graceSec < Date.now() / 1000) return null
+    if (!claims.sub || !UUID.test(claims.sub)) return null
+    return { sub: claims.sub }
+  } catch {
+    return null
+  }
+}
+
+/** Fixed-window limit: false if `key` was used within the last `windowSec` seconds. */
+async function allow(env: Env, key: string, windowSec: number): Promise<boolean> {
+  const k = `rl:${key}`
+  if (await env.RATE.get(k)) return false
+  await env.RATE.put(k, String(Date.now()), { expirationTtl: Math.max(60, windowSec) })
+  return true
+}
+
+async function wakeRequest(env: Env, req: Request) {
+  const auth = req.headers.get('Authorization') ?? ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  const user = token ? await verifyJwt(env, token, 30 * 86400) : null
+  // Signed-in (or recently signed-in) users: one restore request per minute.
+  // No valid token (e.g. a new device while everything sleeps): one per 30 minutes for everyone together.
+  const ok = user ? await allow(env, `wake:${user.sub}`, 60) : await allow(env, 'wake:anon', 1800)
+  if (!ok) throw new HttpError(429, 'too many wake-up requests, try again in a minute')
+  return wake(env)
 }
 
 async function wake(env: Env) {
@@ -295,8 +371,12 @@ export default {
         return data ? json(data, 200, h) : json({ error: 'not found' }, 404, h)
       }
       if (req.method === 'GET' && path === '/api/health') return json(await health(env), 200, h)
-      if (req.method === 'POST' && path === '/api/wake') return json(await wake(env), 200, h)
-      if (req.method === 'POST' && path === '/api/backup') { await requireUser(env, req); return json(await backup(env), 200, h) }
+      if (req.method === 'POST' && path === '/api/wake') return json(await wakeRequest(env, req), 200, h)
+      if (req.method === 'POST' && path === '/api/backup') {
+        const u = await requireUser(env, req)
+        if (!(await allow(env, `backup:${u.id}`, 300))) throw new HttpError(429, 'a backup was made a few minutes ago')
+        return json(await backup(env), 200, h)
+      }
       if (path === '/' || path === '/api') return json({ name: 'sand-gallery-api', ok: true }, 200, h)
       return json({ error: 'not found' }, 404, h)
     } catch (e) {

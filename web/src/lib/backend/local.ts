@@ -149,20 +149,24 @@ export class LocalBackend implements Backend {
     write(db)
   }
 
-  async startTimer(itemId: string, sessionId: string): Promise<Session> {
+  async startTimer(itemId: string, sessionId: string, at?: string | null): Promise<Session> {
     const db = read()
-    const now = new Date().toISOString()
+    const existing = db.sessions.find((s) => s.id === sessionId)
+    if (existing) return existing
+    const now = at && at < new Date().toISOString() ? at : new Date().toISOString()
     for (const s of db.sessions) if (!s.ended_at) s.ended_at = now
     const s: Session = { id: sessionId, item_id: itemId, started_at: now, ended_at: null, owner_id: LOCAL_USER.id }
     db.sessions.push(s)
     write(db)
     return s
   }
-  async stopTimer(): Promise<Session | null> {
+  async stopTimer(at?: string | null): Promise<Session | null> {
     const db = read()
     const open = db.sessions.find((s) => !s.ended_at)
     if (!open) return null
-    open.ended_at = new Date().toISOString()
+    const now = new Date().toISOString()
+    const when = at && at < now ? at : now
+    open.ended_at = when > open.started_at ? when : open.started_at
     write(db)
     return open
   }
@@ -245,5 +249,8 @@ export class LocalBackend implements Backend {
   }
   async wake() {
     this.wakeAt = Date.now() + 6000
+  }
+  isNetworkError() {
+    return false
   }
 }

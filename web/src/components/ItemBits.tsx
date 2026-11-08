@@ -67,20 +67,23 @@ export function TagEditor({ item }: { item: Item }) {
 }
 
 // ---------------------------------------------------------------- new item
-export function NewItemSheet({ open, onClose, parentId }: { open: boolean; onClose: () => void; parentId: string | null }) {
+/** New item dialog. `stay`: keep the current page (adding several sub-items) and offer Open in a toast. */
+export function NewItemSheet({ open, onClose, parentId, stay }: { open: boolean; onClose: () => void; parentId: string | null; stay?: boolean }) {
   const templates = useApp((s) => s.data.templates)
   const [title, setTitle] = useState('')
   const [tpl, setTpl] = useState<string | null>(null)
   const nav = useNavigate()
   const submit = async () => {
     const id = await createItem(parentId, title.trim(), tpl ?? undefined)
+    const made = useApp.getState().data.items.find((i) => i.id === id)
     setTitle(''); setTpl(null); onClose()
-    nav(`/i/${id}`)
+    if (stay) toast(t('item.created', { title: made?.title ?? '' }), 'info', { label: t('share.open'), run: () => nav(`/i/${id}`) })
+    else nav(`/i/${id}`)
   }
   return (
     <Sheet open={open} onClose={onClose} title={parentId ? t('item.newSub') : t('item.new')}>
       <form onSubmit={(e) => { e.preventDefault(); void submit() }} className="flex flex-col gap-4">
-        <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tpl ? templates.find((x) => x.id === tpl)?.item_title : t('item.titlePlaceholder')} className="h-12 text-lg" />
+        <Input autoFocus dir="auto" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tpl ? templates.find((x) => x.id === tpl)?.item_title : t('item.titlePlaceholder')} className="h-12 text-lg" />
         {templates.length > 0 && (
           <div>
             <div className="mb-2 text-[13px] font-medium text-muted">{t('item.fromTemplate')}</div>
@@ -88,7 +91,7 @@ export function NewItemSheet({ open, onClose, parentId }: { open: boolean; onClo
               <TplChip active={!tpl} onClick={() => setTpl(null)} icon={<FilePlus2 size={14} />}>{t('item.blank')}</TplChip>
               {templates.map((x) => (
                 <TplChip key={x.id} active={tpl === x.id} onClick={() => setTpl(x.id)} icon={<Layers size={14} />}>
-                  {x.name} <span className="opacity-60">· {countNodes(x.tree)}</span>
+                  <span dir="auto">{x.name}</span> <span className="opacity-60">· {countNodes(x.tree)}</span>
                 </TplChip>
               ))}
             </div>

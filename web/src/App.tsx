@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { useApp, boot } from './store/app'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { useApp, boot, takeAfterLogin } from './store/app'
 import { Home } from './pages/Home'
 import { ItemPage } from './pages/ItemPage'
 import { SearchPage } from './pages/SearchPage'
@@ -17,7 +17,14 @@ function Gate() {
   const phase = useApp((s) => s.phase)
   const health = useApp((s) => s.health)
   const loc = useLocation()
+  const nav = useNavigate()
   useEffect(() => { void boot() }, [])
+  // After the Google round trip, go back to the page that was open when signing in.
+  useEffect(() => {
+    if (phase !== 'ready') return
+    const next = takeAfterLogin()
+    if (next && next !== loc.pathname) nav(next, { replace: true })
+  }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
   if (loc.pathname.startsWith('/s/')) return null
   if (phase === 'booting' || (phase === 'loading' && health === 'up')) {
     return (
@@ -28,7 +35,15 @@ function Gate() {
     )
   }
   if (phase === 'signedOut') return <Login />
-  if (phase !== 'ready') return null
+  if (phase !== 'ready') {
+    if (health !== 'unreachable') return null
+    return (
+      <div className="flex min-h-full flex-col items-center justify-center gap-4 px-8 text-center">
+        <Hourglass size={64} />
+        <p className="max-w-xs text-muted">{t('offline.noCache')}</p>
+      </div>
+    )
+  }
   return (
     <>
       <Routes>

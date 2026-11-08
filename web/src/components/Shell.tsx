@@ -6,7 +6,7 @@ import { setTheme } from '../lib/theme'
 import { useApp, checkHealth, dismissToast, wakeUp } from '../store/app'
 import { Hourglass } from './Hourglass'
 import { Button, IconButton, cx } from './ui'
-import { t } from '../i18n'
+import { t, tn } from '../i18n'
 
 export function TopBar({ back, title, children, crumbs }: { back?: string | true; title?: ReactNode; children?: ReactNode; crumbs?: ReactNode }) {
   const nav = useNavigate()
@@ -58,7 +58,21 @@ export function HeaderActions() {
 export function WakeLayer() {
   const health = useApp((s) => s.health)
   const err = useApp((s) => s.wakeError)
+  const queued = useApp((s) => s.queued)
+  const phase = useApp((s) => s.phase)
   if (health === 'up') return null
+  if (health === 'unreachable') {
+    // Offline: a small pill, the (cached) gallery stays usable underneath.
+    return (
+      <div role="status" className="pointer-events-none fixed inset-x-0 top-[calc(3.9rem+env(safe-area-inset-top))] z-40 flex justify-center px-3">
+        <div className="rise pointer-events-auto flex max-w-md items-center gap-2.5 rounded-full bg-[#2a2017] py-1.5 pl-3.5 pr-1.5 text-[13px] text-[#f3e9da] shadow-lift dark:bg-[#f3e9da] dark:text-[#2a2017]">
+          <WifiOff size={15} className="shrink-0" />
+          <span className="min-w-0">{phase === 'ready' ? (queued ? tn('sync.pending', queued) : t('sync.offlineShort')) : t('wake.offline')}</span>
+          <button onClick={() => void checkHealth()} aria-label={t('wake.retry')} title={t('wake.retry')} className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/15 dark:bg-black/10"><RefreshCw size={13} /></button>
+        </div>
+      </div>
+    )
+  }
   if (health === 'waking') {
     return (
       <div className="fade fixed inset-0 z-[80] flex flex-col items-center justify-center bg-bg px-8 text-center">
@@ -100,7 +114,7 @@ export function WakeLayer() {
 export function Toasts() {
   const toasts = useApp((s) => s.toasts)
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-[calc(4rem+env(safe-area-inset-top))] z-[90] flex flex-col items-center gap-2 px-4">
+    <div className="pointer-events-none fixed inset-x-0 top-[calc(4rem+env(safe-area-inset-top))] z-[100] flex flex-col items-center gap-2 px-4">
       {toasts.map((x) => (
         <div key={x.id} className={cx('rise pointer-events-auto flex max-w-md items-center gap-3 rounded-2xl px-4 py-2.5 text-sm shadow-lift', x.tone === 'error' ? 'bg-danger text-white' : 'bg-[#2a2017] text-[#f3e9da] dark:bg-[#f3e9da] dark:text-[#2a2017]')}>
           <span className="min-w-0 flex-1 break-words">{x.text}</span>

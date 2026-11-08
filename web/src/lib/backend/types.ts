@@ -36,10 +36,13 @@ export interface Backend {
   remove(table: TableName, ids: string[]): Promise<void>
   saveSettings(s: Settings): Promise<void>
 
-  /** Closes any open session and opens a new one for the item. Returns the new session (server clock). */
-  startTimer(itemId: string, sessionId: string): Promise<Session>
-  /** Closes the open session, if any. Returns the closed session. */
-  stopTimer(): Promise<Session | null>
+  /**
+   * Closes any open session and opens a new one for the item. `at` is when it happened (for calls queued
+   * offline); null means "now" on the server clock. Idempotent per sessionId.
+   */
+  startTimer(itemId: string, sessionId: string, at?: string | null): Promise<Session>
+  /** Closes the open session, if any, at `at` (null = now). Returns the closed session. */
+  stopTimer(at?: string | null): Promise<Session | null>
 
   /** Called with a short debounce whenever another device changed data. */
   subscribe(onRemoteChange: () => void): () => void

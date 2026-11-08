@@ -16,7 +16,7 @@ import { cx, IconButton } from './ui'
 import { t } from '../i18n'
 import { locale } from '../i18n'
 
-export function ItemsView({ items, view, scopeIds, pathOf }: { items: Item[]; view: ViewMode; scopeIds?: Set<string>; pathOf?: (it: Item) => string }) {
+export function ItemsView({ items, view, scopeIds, pathOf, rootId }: { items: Item[]; view: ViewMode; scopeIds?: Set<string>; pathOf?: (it: Item) => string; rootId?: string }) {
   const statuses = useApp((s) => s.data.statuses)
   const showDue = useApp((s) => s.data.settings.due_dates_enabled)
   const covers = useCoverFor()
@@ -24,7 +24,7 @@ export function ItemsView({ items, view, scopeIds, pathOf }: { items: Item[]; vi
   const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses])
 
   if (view === 'board') return <Board items={items} statuses={statuses} />
-  if (view === 'calendar') return <CalendarView items={items} scopeIds={scopeIds} />
+  if (view === 'calendar') return <CalendarView items={items} scopeIds={scopeIds} rootId={rootId} />
 
   if (view === 'list') {
     return (
@@ -81,7 +81,7 @@ function Board({ items, statuses }: { items: Item[]; statuses: Status[] }) {
   }
   const dragItem = items.find((i) => i.id === dragId)
   return (
-    <DndContext sensors={sensors} onDragStart={(e) => setDragId(String(e.active.id))} onDragEnd={onEnd} onDragCancel={() => setDragId(null)}>
+    <DndContext sensors={sensors} autoScroll={{ threshold: { x: 0.08, y: 0.12 }, acceleration: 4 }} onDragStart={(e) => setDragId(String(e.active.id))} onDragEnd={onEnd} onDragCancel={() => setDragId(null)}>
       <div className="no-scrollbar -mx-4 flex snap-x snap-mandatory items-start gap-3 overflow-x-auto px-4 pb-4 sm:mx-0 sm:px-0">
         {cols.map((s) => (
           <Column key={s.id} id={s.id} title={s.name} color={s.color} items={items.filter((i) => i.status_id === s.id)} />
@@ -145,7 +145,7 @@ function Card({ item, overlay }: { item: Item; overlay?: boolean }) {
     >
       {cover && <Thumb media={cover} className="h-28 w-full" />}
       <div className="p-3">
-        <div className="line-clamp-2 text-[14px] font-medium leading-snug">{item.title}</div>
+        <div dir="auto" className="line-clamp-2 text-[14px] font-medium leading-snug [overflow-wrap:anywhere]">{item.title}</div>
         <div className="mt-1.5 flex items-center gap-3 text-xs text-muted">
           {(total > 0 || ticking) && (
             <span className={cx('inline-flex items-center gap-1 tabular', ticking && 'text-accent-strong')}>
@@ -161,7 +161,7 @@ function Card({ item, overlay }: { item: Item; overlay?: boolean }) {
 }
 
 // ---------------------------------------------------------------- calendar
-function CalendarView({ items, scopeIds }: { items: Item[]; scopeIds?: Set<string> }) {
+function CalendarView({ items, scopeIds, rootId }: { items: Item[]; scopeIds?: Set<string>; rootId?: string }) {
   const all = useApp((s) => s.data.items)
   const sessions = useApp((s) => s.data.sessions)
   const statuses = useApp((s) => s.data.statuses)
@@ -172,13 +172,16 @@ function CalendarView({ items, scopeIds }: { items: Item[]; scopeIds?: Set<strin
 
   const dueItems = useMemo(() => {
     if (!dueOn) return []
-    const pool = scopeIds ? all.filter((i) => scopeIds.has(i.id)) : all
+    const pool = scopeIds ? all.filter((i) => scopeIds.has(i.id) && i.id !== rootId) : all
     return pool.filter((i) => i.due_date)
   }, [all, scopeIds, dueOn])
   void items
 
   const start = startOfWeek(month, ws)
-  const days = Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d })
+  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
+  const lead = Math.round((month.getTime() - start.getTime()) / 86400_000)
+  const weeks = Math.ceil((lead + daysInMonth) / 7)
+  const days = Array.from({ length: weeks * 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d })
   const worked = useMemo(() => {
     const m = new Map<string, number>()
     const scoped = scopeIds ? sessions.filter((s) => scopeIds.has(s.item_id)) : sessions
@@ -235,11 +238,11 @@ function CalendarView({ items, scopeIds }: { items: Item[]; scopeIds?: Set<strin
               onClick={() => setSel(key)}
               className={cx(
                 'relative flex min-h-16 flex-col items-stretch rounded-xl p-1 text-left transition sm:min-h-24 sm:p-1.5',
-                inMonth ? 'bg-surface' : 'bg-transparent opacity-45',
+                inMonth ? 'bg-surface' : 'pointer-events-none bg-transparent opacity-35',
                 sel === key && 'ring-2 ring-accent',
               )}
             >
-              <span className={cx('mb-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs tabular', key === today && 'bg-accent font-semibold text-white dark:text-[#1d1813]')}>{d.getDate()}</span>
+              <span className={cx('mb-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs tabular', key === today && 'bg-primary font-semibold text-on-primary')}>{d.getDate()}</span>
               {w > 0 && (
                 <span className="mb-0.5 block h-1.5 rounded-full bg-accent" style={{ opacity: 0.25 + 0.75 * (w / maxWorked), width: `${Math.max(18, (w / maxWorked) * 100)}%` }} title={fmtDuration(w)} />
               )}

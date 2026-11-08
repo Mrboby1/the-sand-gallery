@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { ArrowDown, ArrowUp, Check, Copy, DatabaseBackup, LogOut, Pencil, Plus, Trash2 } from 'lucide-react'
 import {
@@ -10,6 +11,7 @@ import { getTheme, setStyle, setTheme, useStyle, type StylePref, type ThemePref 
 import { TopBar } from '../components/Shell'
 import { Button, Field, IconButton, Input, Sheet, Switch, confirmDialog, cx } from '../components/ui'
 import { useMoney } from '../components/Tabs'
+import { onColor } from '../components/StatusPill'
 import { t } from '../i18n'
 
 const CURRENCIES = ['ILS', 'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF', 'JPY']
@@ -17,7 +19,7 @@ const SWATCHES = ['#9b87c9', '#d9903d', '#8f9aa6', '#5f9e6e', '#c0564a', '#4f8fb
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
-    <section className="rise rounded-3xl bg-surface p-5 border border-line">
+    <section className="rise rounded-3xl border border-line bg-surface p-5">
       <h2 className="font-display text-xl font-semibold">{title}</h2>
       {hint && <p className="mt-1 text-[13px] text-muted">{hint}</p>}
       <div className="mt-4">{children}</div>
@@ -40,7 +42,7 @@ export function SettingsPage() {
   return (
     <div className="min-h-full pb-24">
       <TopBar back="/" title={t('settings.title')} />
-      <main className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pt-4 sm:px-6">
+      <main className="mx-auto max-w-6xl columns-1 gap-4 px-4 pt-4 sm:px-6 lg:columns-2 [&>*]:mb-4 [&>*]:break-inside-avoid">
         <Section title={t('settings.statuses')} hint={t('settings.statusesHint')}>
           <div className="flex flex-col gap-2">
             {statuses.map((st, i) => (
@@ -179,9 +181,10 @@ function BackupButton() {
         setBusy(true)
         try {
           const r = await backend.backupNow()
-          toast(r.ok ? t('settings.backupDone') : t('common.error', { error: r.reason ?? '?' }), r.ok ? 'info' : 'error')
+          toast(r.ok ? t('settings.backupDone') : t('settings.backupFailed'), r.ok ? 'info' : 'error')
         } catch (e) {
-          toast(t('common.error', { error: String((e as Error).message ?? e) }), 'error')
+          console.error(e)
+          toast(String(e).includes('429') ? t('settings.backupRecent') : t('settings.backupFailed'), 'error')
         } finally {
           setBusy(false)
         }
@@ -202,22 +205,42 @@ function Segmented({ value, options, onChange }: { value: string; options: { v: 
   )
 }
 
+/** Swatch popover, rendered in a portal at a fixed position so no card can clip it. */
 function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
-  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const btn = useRef<HTMLButtonElement>(null)
+  const pop = useRef<HTMLDivElement>(null)
+  const open = !!pos
+  const setOpen = (o: boolean) => {
+    if (!o || !btn.current) return setPos(null)
+    const r = btn.current.getBoundingClientRect()
+    const w = 216, h = 150
+    setPos({ x: Math.min(r.left, window.innerWidth - w - 8), y: r.bottom + h + 8 > window.innerHeight ? r.top - h - 6 : r.bottom + 6 })
+  }
+  useEffect(() => {
+    if (!open) return
+    const close = (e: Event) => { if (!pop.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node)) setPos(null) }
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setPos(null)
+    document.addEventListener('mousedown', close)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', close); window.removeEventListener('scroll', close, true); window.removeEventListener('keydown', esc) }
+  }, [open])
   return (
     <div className="relative">
-      <button aria-label="Color" onClick={() => setOpen((o) => !o)} className="h-9 w-9 shrink-0 rounded-full ring-2 ring-surface" style={{ background: value }} />
-      {open && (
-        <div className="rise absolute left-0 top-11 z-30 grid w-48 grid-cols-5 gap-2 rounded-2xl border border-line bg-surface p-3 shadow-lift">
+      <button ref={btn} aria-label={t('settings.color')} aria-expanded={open} onClick={() => setOpen(!open)} className="h-9 w-9 shrink-0 rounded-full ring-2 ring-surface" style={{ background: value }} />
+      {pos && createPortal(
+        <div ref={pop} style={{ left: pos.x, top: pos.y }} className="rise fixed z-[96] grid w-[216px] grid-cols-5 gap-2 rounded-2xl border border-line bg-surface p-3 shadow-lift">
           {SWATCHES.map((c) => (
-            <button key={c} onClick={() => { onChange(c); setOpen(false) }} className="flex h-7 w-7 items-center justify-center rounded-full" style={{ background: c }} aria-label={c}>
-              {c === value && <Check size={14} color="white" />}
+            <button key={c} onClick={() => { onChange(c); setPos(null) }} className="flex h-7 w-7 items-center justify-center rounded-full" style={{ background: c }} aria-label={c}>
+              {c === value && <Check size={14} color={onColor(c)} />}
             </button>
           ))}
           <label className="col-span-5 mt-1 flex items-center gap-2 text-xs text-muted">
-            <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="h-7 w-10 cursor-pointer rounded border-0 bg-transparent" /> Custom
+            <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="h-7 w-10 cursor-pointer rounded border-0 bg-transparent" /> {t('settings.customColor')}
           </label>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

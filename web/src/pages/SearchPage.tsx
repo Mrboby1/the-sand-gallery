@@ -7,6 +7,7 @@ import { ItemsView } from '../components/ItemsView'
 import { ViewSwitcher, type ViewMode } from '../components/ViewSwitcher'
 import { allTags } from '../components/ItemBits'
 import { cx } from '../components/ui'
+import { onColor } from '../components/StatusPill'
 import { t } from '../i18n'
 
 export function SearchPage() {
@@ -68,8 +69,8 @@ export function SearchPage() {
               <button
                 key={s.id}
                 onClick={() => setStatus(status === s.id ? null : s.id)}
-                className={cx('inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] transition', status === s.id ? 'border-transparent text-white' : 'border-line hover:bg-surface-2')}
-                style={status === s.id ? { background: s.color } : undefined}
+                className={cx('inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] transition', status === s.id ? 'border-transparent' : 'border-line hover:bg-surface-2')}
+                style={status === s.id ? { background: s.color, color: onColor(s.color) } : undefined}
               >
                 {status !== s.id && <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />}{s.name}
               </button>

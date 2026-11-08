@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronLeft, ChevronRight, ExternalLink, Image as ImageIcon, Play, Star, Trash2, Upload, X } from 'lucide-react'
+import { AlertCircle, ChevronLeft, ChevronRight, ExternalLink, Image as ImageIcon, Play, RotateCw, Star, Trash2, Upload, X } from 'lucide-react'
 import type { Item, Media } from '../lib/types'
-import { useApp, deleteMedia, updateItem, updateMedia, uploadFiles } from '../store/app'
+import { useApp, deleteMedia, dismissUpload, retryUpload, updateItem, updateMedia, uploadFiles } from '../store/app'
 import { useMediaUrl } from '../lib/hooks'
 import { Thumb } from './Tile'
 import { Button, IconButton, confirmDialog, cx } from './ui'
@@ -64,8 +64,13 @@ export function MediaSection({ item }: { item: Item }) {
       ) : (
         <div className="grid grid-cols-3 gap-1 overflow-hidden rounded-2xl sm:grid-cols-4 sm:gap-1.5 lg:grid-cols-6">
           {shown.map((m, i) => (
-            <button key={m.id} onClick={() => setOpen(i)} className="group relative aspect-square overflow-hidden bg-surface-2">
-              <Thumb media={m} className="h-full w-full transition duration-500 group-hover:scale-105" />
+            <button
+              key={m.id}
+              onClick={() => setOpen(i)}
+              aria-label={`${t(m.kind === 'video' ? 'gallery.video' : 'gallery.photo')} ${i + 1}${item.cover_media_id === m.id ? ` (${t('gallery.isCover')})` : ''}`}
+              className="group relative aspect-square overflow-hidden bg-surface-2"
+            >
+              <Thumb media={m} alt={`${item.title} ${i + 1}`} className="h-full w-full transition duration-500 group-hover:scale-105" />
               {m.kind === 'video' && (
                 <span className="absolute inset-0 m-auto flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm"><Play size={16} fill="white" /></span>
               )}
@@ -76,11 +81,22 @@ export function MediaSection({ item }: { item: Item }) {
             </button>
           ))}
           {uploads.map((u) => (
-            <div key={u.id} className="relative flex aspect-square items-center justify-center bg-surface-2">
-              <svg viewBox="0 0 36 36" className="h-12 w-12 -rotate-90">
-                <circle cx="18" cy="18" r="15" fill="none" stroke="var(--sg-line)" strokeWidth="3" />
-                <circle cx="18" cy="18" r="15" fill="none" stroke={u.error ? 'var(--sg-danger)' : 'var(--sg-accent)'} strokeWidth="3" strokeLinecap="round" strokeDasharray={`${u.progress * 94.2} 94.2`} />
-              </svg>
+            <div key={u.id} className="relative flex aspect-square flex-col items-center justify-center gap-1.5 bg-surface-2 p-2 text-center">
+              {u.error ? (
+                <>
+                  <AlertCircle size={22} className="text-danger" />
+                  <span className="line-clamp-2 text-[11px] leading-tight text-ink">{u.error}</span>
+                  <div className="flex gap-1">
+                    <button onClick={() => retryUpload(u.id)} aria-label={`${t('upload.retry')} ${u.name}`} className="inline-flex h-7 items-center gap-1 rounded-full bg-primary px-2.5 text-[11px] font-medium text-on-primary"><RotateCw size={12} /> {t('upload.retry')}</button>
+                    <button onClick={() => dismissUpload(u.id)} aria-label={`${t('upload.dismiss')} ${u.name}`} title={t('upload.dismiss')} className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-surface text-muted"><X size={13} /></button>
+                  </div>
+                </>
+              ) : (
+                <svg viewBox="0 0 36 36" className="h-12 w-12 -rotate-90" role="progressbar" aria-valuenow={Math.round(u.progress * 100)} aria-label={u.name}>
+                  <circle cx="18" cy="18" r="15" fill="none" stroke="var(--sg-line)" strokeWidth="3" />
+                  <circle cx="18" cy="18" r="15" fill="none" stroke="var(--sg-accent)" strokeWidth="3" strokeLinecap="round" strokeDasharray={`${u.progress * 94.2} 94.2`} />
+                </svg>
+              )}
               <span className="absolute bottom-1 inset-x-1 truncate text-center text-[10px] text-muted">{u.name}</span>
             </div>
           ))}
@@ -111,6 +127,11 @@ function Lightbox({ list, index, item, onIndex, onClose }: { list: Media[]; inde
     return () => window.removeEventListener('keydown', k)
   })
   const isCover = item.cover_media_id === m.id
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
   return createPortal(
     <div
       className="fade fixed inset-0 z-[70] flex flex-col bg-[#0d0a07] text-white"
@@ -133,7 +154,7 @@ function Lightbox({ list, index, item, onIndex, onClose }: { list: Media[]; inde
         {m.kind === 'video' ? (
           url ? <video key={m.id} src={url} poster={thumb} controls playsInline autoPlay className="max-h-full max-w-full" /> : <Spinner />
         ) : url ? (
-          <img key={m.id} src={url} alt="" className="fade max-h-full max-w-full select-none object-contain" draggable={false} />
+          <img key={m.id} src={url} alt={`${item.title} ${index + 1}`} className="fade max-h-full max-w-full select-none object-contain" draggable={false} />
         ) : thumb ? (
           <img src={thumb} alt="" className="max-h-full max-w-full object-contain blur-[1px]" />
         ) : <Spinner />}
@@ -151,8 +172,9 @@ function Lightbox({ list, index, item, onIndex, onClose }: { list: Media[]; inde
             </button>
           ))}
         </div>
-        {url && <LbButton onClick={() => window.open(url, '_blank', 'noopener')}><ExternalLink size={16} /></LbButton>}
+        {url && <LbButton label={t('gallery.download')} onClick={() => window.open(url, '_blank', 'noopener')}><ExternalLink size={16} /></LbButton>}
         <LbButton
+          label={t('gallery.deleteMedia')}
           danger
           onClick={async () => {
             if (await confirmDialog(t('gallery.deleteMediaConfirm', { kind: t(m.kind === 'video' ? 'gallery.video' : 'gallery.photo') }), { danger: true, okLabel: t('common.delete') })) {
@@ -170,9 +192,9 @@ function Lightbox({ list, index, item, onIndex, onClose }: { list: Media[]; inde
   )
 }
 
-function LbButton({ children, onClick, active, danger }: { children: React.ReactNode; onClick: () => void; active?: boolean; danger?: boolean }) {
+function LbButton({ children, onClick, active, danger, label }: { children: React.ReactNode; onClick: () => void; active?: boolean; danger?: boolean; label?: string }) {
   return (
-    <button onClick={onClick} className={cx('inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm transition', active ? 'bg-[#e2a55c] text-[#2a2017]' : 'bg-white/10 hover:bg-white/20', danger && 'hover:bg-[#b4483c]')}>
+    <button onClick={onClick} aria-label={label} title={label} className={cx('inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm transition', active ? 'bg-[#e2a55c] text-[#2a2017]' : 'bg-white/10 hover:bg-white/20', danger && 'hover:bg-[#b4483c]')}>
       {children}
     </button>
   )

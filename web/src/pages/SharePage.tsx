@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Layers, Play, X } from 'lucide-react'
 import { backend } from '../lib/backend'
 import type { SharedGallery } from '../lib/types'
@@ -14,9 +14,12 @@ type SMedia = SharedGallery['media'][number]
 export function SharePage() {
   const { token = '' } = useParams()
   const [data, setData] = useState<SharedGallery | null | undefined>(undefined)
-  const [at, setAt] = useState<string | null>(null)
+  const [params, setParams] = useSearchParams()
+  const at = params.get('at')
+  const setAt = (id: string) => setParams(data && id === data.root_id ? {} : { at: id })
   const [open, setOpen] = useState<{ list: SMedia[]; i: number } | null>(null)
   useEffect(() => { backend.fetchShared(token).then(setData).catch(() => setData(null)) }, [token])
+  useEffect(() => { if (data) document.title = `${data.items.find((i) => i.id === (at ?? data.root_id))?.title ?? ''} · ${t('app.name')}` }, [data, at])
 
   const view = useMemo(() => {
     if (!data) return null
@@ -56,7 +59,7 @@ export function SharePage() {
           </nav>
         )}
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-display text-4xl font-semibold leading-tight">{view.item.title}</h1>
+          <h1 dir="auto" className="font-display text-4xl font-semibold leading-tight [overflow-wrap:anywhere]">{view.item.title}</h1>
           <StatusPill status={view.status(view.item.status_id) as never} size="sm" />
         </div>
       </header>
@@ -70,7 +73,10 @@ export function SharePage() {
                   <div className="relative aspect-square overflow-hidden rounded-2xl bg-surface-2">
                     {c ? <img src={c.thumb_url ?? c.url} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition group-hover:opacity-90" /> : <div className="absolute inset-0 flex items-center justify-center text-muted/60"><Layers size={34} strokeWidth={1.5} /></div>}
                   </div>
-                  <div className="px-0.5 pt-2.5 text-[15px] font-medium">{k.title}</div>
+                  <div className="flex items-start justify-between gap-2 px-0.5 pt-2.5">
+                    <span dir="auto" className="text-[15px] font-medium [overflow-wrap:anywhere]">{k.title}</span>
+                    <StatusPill status={view.status(k.status_id) as never} size="xs" className="mt-0.5 shrink-0" />
+                  </div>
                 </button>
               )
             })}

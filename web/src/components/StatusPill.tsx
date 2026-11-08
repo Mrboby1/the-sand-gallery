@@ -2,12 +2,23 @@ import type { Status } from '../lib/types'
 import { cx } from './ui'
 import { t } from '../i18n'
 
-/** Readable text color on top of a status color. */
-export function onColor(hex: string): string {
+function luminance(hex: string): number {
   const m = hex.replace('#', '')
   const n = parseInt(m.length === 3 ? m.split('').map((c) => c + c).join('') : m, 16)
-  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? '#2a2017' : '#ffffff'
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+    const c = v / 255
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]
+}
+const contrast = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+const DARK = '#2a2017'
+const DARK_L = luminance(DARK)
+
+/** Text colour for a coloured background: whichever of dark ink or white has the higher WCAG contrast. */
+export function onColor(hex: string): string {
+  const l = luminance(hex)
+  return contrast(l, DARK_L) >= contrast(l, 1) ? DARK : '#ffffff'
 }
 
 export function StatusPill({ status, size = 'sm', solid = true, className }: { status?: Status | null; size?: 'xs' | 'sm' | 'md'; solid?: boolean; className?: string }) {

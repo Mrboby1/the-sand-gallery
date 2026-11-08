@@ -18,7 +18,7 @@ export function Button({ variant = 'soft', size = 'md', className, children, ...
         size === 'sm' && 'h-8 px-3 text-[13px]',
         size === 'md' && 'h-10 px-4 text-sm',
         size === 'lg' && 'h-12 px-6 text-[15px]',
-        variant === 'primary' && 'bg-accent text-white shadow-tile hover:bg-accent-strong dark:text-[#1d1813]',
+        variant === 'primary' && 'bg-primary text-on-primary shadow-tile hover:brightness-110',
         variant === 'soft' && 'bg-surface-2 text-ink hover:bg-accent-soft',
         variant === 'ghost' && 'text-ink hover:bg-surface-2',
         variant === 'outline' && 'border border-line text-ink hover:bg-surface-2',

@@ -75,7 +75,7 @@ export function Home() {
       <button
         aria-label={t('item.new')}
         onClick={() => setNewOpen(true)}
-        className="fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-5 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-lift transition active:scale-95 sm:hidden dark:text-[#1d1813]"
+        className="fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-5 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-on-primary shadow-lift transition active:scale-95 sm:hidden"
       >
         <Plus size={26} />
       </button>

@@ -8,6 +8,52 @@ import { useId } from 'react'
  * `detail="full"` draws the falling sand outside the glass (taller drawing, 120x236 units);
  * `detail="lite"` is a compact glyph for chips and icons (120x160 units).
  */
+interface Grain { x: number; d: number; delay: number; r: number; dx: number; dy: number }
+
+/** Small deterministic PRNG so the "random" grains are identical on every render (no flicker). */
+function rng(seed: number) {
+  return () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0
+    return seed / 4294967296
+  }
+}
+
+/**
+ * Grains pouring in above the top opening: a nearly straight line with a little jitter, evenly spaced in
+ * time (negative delays spread them along the path from the first frame).
+ */
+function makeIncoming(n: number, rMin: number, rMax: number, seed: number, top: number): Grain[] {
+  const r = rng(seed)
+  const d = 1.25
+  return Array.from({ length: n }, (_, i) => ({
+    x: 60 + (r() - 0.5) * 2.2,
+    d: d * (0.92 + r() * 0.16),
+    delay: -((i + r() * 0.35) / n) * d,
+    r: rMin + r() * (rMax - rMin),
+    dx: (r() - 0.5) * 1.2,
+    dy: 48 - (top + 2),
+  }))
+}
+
+/** Grains leaving through the neck at the same steady rhythm, each at a slightly random angle, so they fan out below. */
+function makeOutgoing(n: number, rMin: number, rMax: number, seed: number, fall: number, spread: number): Grain[] {
+  const r = rng(seed)
+  const d = 1.4
+  return Array.from({ length: n }, (_, i) => ({
+    x: 60 + (r() - 0.5) * 1.5,
+    d: d * (0.9 + r() * 0.2),
+    delay: -((i + r() * 0.3) / n) * d,
+    r: rMin + r() * (rMax - rMin),
+    dx: (r() - 0.5) * 2 * spread,
+    dy: fall * (0.9 + r() * 0.1),
+  }))
+}
+
+const INCOMING_FULL = makeIncoming(16, 0.7, 1.15, 7, -38)
+const OUTGOING_FULL = makeOutgoing(30, 0.65, 1.1, 11, 238 - 38 - 2 - 82, 16)
+const INCOMING_LITE = makeIncoming(3, 2, 2.4, 3, 0)
+const OUTGOING_LITE = makeOutgoing(4, 2, 2.4, 5, 158 - 82, 5)
+
 export function Hourglass({
   running = false,
   size = 48,
@@ -24,8 +70,6 @@ export function Hourglass({
 }) {
   const uid = useId().replace(/[:«»]/g, '')
   const clip = `hg-clip-${uid}`
-  const fadeIn = `hg-fin-${uid}`
-  const fadeOut = `hg-fout-${uid}`
   const sand = `hg-sand-${uid}`
   const glass = `hg-glass-${uid}`
   const glow = `hg-glowg-${uid}`
@@ -33,42 +77,12 @@ export function Hourglass({
   const top = full ? -38 : 0
   const height = full ? 238 : 160
   const bottom = top + height
+  void bottom
 
-  // Grains pouring in from above the open top, down to the sand surface (~y 48).
-  const incoming = full
-    ? [
-        { x: 60, d: 1.2, delay: 0, r: 1.9, dx: 0 },
-        { x: 58.4, d: 1.35, delay: -0.4, r: 1.5, dx: 0.6 },
-        { x: 61.6, d: 1.15, delay: -0.8, r: 1.6, dx: -0.5 },
-        { x: 59.3, d: 1.45, delay: -0.2, r: 1.3, dx: 0.3 },
-        { x: 60.8, d: 1.25, delay: -0.65, r: 1.4, dx: -0.2 },
-        { x: 60.2, d: 1.3, delay: -1.0, r: 1.7, dx: 0 },
-      ]
-    : [
-        { x: 60, d: 1.0, delay: 0, r: 2.4, dx: 0 },
-        { x: 60, d: 1.0, delay: -0.5, r: 2.4, dx: 0 },
-      ]
-  // Grains falling from the neck, out through the open bottom and away below it, spreading a little.
-  const outgoing = full
-    ? [
-        { x: 60, d: 1.25, delay: 0, r: 1.9, dx: 0 },
-        { x: 59.2, d: 1.4, delay: -0.3, r: 1.5, dx: -5 },
-        { x: 60.8, d: 1.3, delay: -0.6, r: 1.6, dx: 6 },
-        { x: 59.6, d: 1.5, delay: -0.9, r: 1.3, dx: -9 },
-        { x: 60.4, d: 1.2, delay: -0.45, r: 1.7, dx: 3 },
-        { x: 59.9, d: 1.55, delay: -1.15, r: 1.2, dx: 10 },
-        { x: 60.1, d: 1.35, delay: -0.15, r: 1.4, dx: -2 },
-        { x: 60.3, d: 1.45, delay: -0.75, r: 1.1, dx: -12 },
-        { x: 59.7, d: 1.3, delay: -1.05, r: 1.2, dx: 13 },
-      ]
-    : [
-        { x: 60, d: 0.9, delay: 0, r: 2.4, dx: 0 },
-        { x: 60, d: 0.9, delay: -0.45, r: 2.4, dx: 0 },
-      ]
+  const incoming = full ? INCOMING_FULL : INCOMING_LITE
+  const outgoing = full ? OUTGOING_FULL : OUTGOING_LITE
   const inStart = top + 2
-  const inEnd = 48
   const outStart = 82
-  const outEnd = bottom - 2
 
   const interior =
     'M 26 18 C 26 52 56 66 56.5 80 C 56 94 26 108 26 142 L 94 142 C 94 108 64 94 63.5 80 C 64 66 94 52 94 18 Z'
@@ -87,16 +101,6 @@ export function Hourglass({
         <clipPath id={clip}>
           <path d={interior} />
         </clipPath>
-        <linearGradient id={fadeIn} gradientUnits="userSpaceOnUse" x1="0" y1={top} x2="0" y2={inEnd}>
-          <stop offset="0" stopColor="var(--sand-2)" stopOpacity="0" />
-          <stop offset="0.35" stopColor="var(--sand-2)" stopOpacity="0.9" />
-          <stop offset="1" stopColor="var(--sand-2)" stopOpacity="1" />
-        </linearGradient>
-        <linearGradient id={fadeOut} gradientUnits="userSpaceOnUse" x1="0" y1="60" x2="0" y2={bottom}>
-          <stop offset="0" stopColor="var(--sand-2)" stopOpacity="1" />
-          <stop offset={full ? '0.55' : '0.8'} stopColor="var(--sand-2)" stopOpacity="0.9" />
-          <stop offset="1" stopColor="var(--sand-2)" stopOpacity="0" />
-        </linearGradient>
         <linearGradient id={sand} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="var(--sand-1)" />
           <stop offset="0.55" stopColor="var(--sand-2)" />
@@ -129,10 +133,6 @@ export function Hourglass({
         </g>
       </g>
 
-      {/* streams: pouring in from above, and from the neck out of the bottom and away */}
-      <line className="stream" x1="60" y1={top} x2="60" y2={inEnd} stroke={`url(#${fadeIn})`} strokeWidth={full ? 2.3 : 3} strokeLinecap="round" strokeDasharray="3 3.5" />
-      <line className="stream" x1="60" y1="60" x2="60" y2={bottom} stroke={`url(#${fadeOut})`} strokeWidth={full ? 2.3 : 3} strokeLinecap="round" strokeDasharray="3 3.5" />
-
       {incoming.map((g, i) => (
         <circle
           key={`i${i}`}
@@ -141,7 +141,7 @@ export function Hourglass({
           cy={inStart}
           r={g.r}
           fill="var(--sand-2)"
-          style={{ ['--d' as string]: `${g.d}s`, ['--delay' as string]: `${g.delay}s`, ['--dy' as string]: `${inEnd - inStart}px`, ['--dx' as string]: `${g.dx}px` }}
+          style={{ ['--d' as string]: `${g.d}s`, ['--delay' as string]: `${g.delay}s`, ['--dy' as string]: `${g.dy}px`, ['--dx' as string]: `${g.dx}px` }}
         />
       ))}
       {outgoing.map((g, i) => (
@@ -152,7 +152,7 @@ export function Hourglass({
           cy={outStart}
           r={g.r}
           fill="var(--sand-2)"
-          style={{ ['--d' as string]: `${g.d}s`, ['--delay' as string]: `${g.delay}s`, ['--dy' as string]: `${outEnd - outStart}px`, ['--dx' as string]: `${g.dx}px` }}
+          style={{ ['--d' as string]: `${g.d}s`, ['--delay' as string]: `${g.delay}s`, ['--dy' as string]: `${g.dy}px`, ['--dx' as string]: `${g.dx}px` }}
         />
       ))}
 

@@ -22,7 +22,7 @@ export function fmtDuration(ms: number, opts: { seconds?: boolean } = {}): strin
   }
   if (h) return `${h}h ${String(m).padStart(2, '0')}m`
   if (m) return `${m}m`
-  return totalSec > 0 ? '<1m' : '0m'
+  return totalSec > 0 ? `${s}s` : '0m'
 }
 
 /** "1:02:03" style clock. */

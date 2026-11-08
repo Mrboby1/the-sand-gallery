@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { backend } from '../lib/backend'
 import type { HealthState } from '../lib/backend/types'
+import { isNetworkError } from '../lib/backend/supabase'
 import type {
-  AppUser, CostLine, Item, Media, Session, Settings, ShareLink, Snapshot, Status, Template, TemplateNode,
+  AppUser, CostLine, Item, Media, Session, Settings, ShareLink, Snapshot, Status, TableName, Template, TemplateNode,
 } from '../lib/types'
 import { DEFAULT_SETTINGS } from '../lib/types'
 import { t } from '../i18n'
@@ -26,6 +27,8 @@ interface State {
   toasts: Toast[]
   uploads: Upload[]
   urls: Record<string, string>
+  /** Changes made offline that are waiting to be sent. */
+  queued: number
 }
 
 const now = () => new Date().toISOString()
@@ -40,6 +43,7 @@ export const useApp = create<State>(() => ({
   toasts: [],
   uploads: [],
   urls: {},
+  queued: 0,
 }))
 
 const get = useApp.getState
@@ -50,70 +54,240 @@ let toastSeq = 1
 export function toast(text: string, tone: Toast['tone'] = 'info', action?: Toast['action']) {
   const id = toastSeq++
   set((s) => ({ toasts: [...s.toasts, { id, text, tone, action }] }))
-  setTimeout(() => dismissToast(id), tone === 'error' ? 7000 : 3200)
+  setTimeout(() => dismissToast(id), tone === 'error' ? 7000 : action ? 5000 : 3200)
 }
 export function dismissToast(id: number) {
   set((s) => ({ toasts: s.toasts.filter((x) => x.id !== id) }))
 }
 
-// ---------------------------------------------------------------- boot / sync
-let pending = 0
+function errMsg(e: unknown): string {
+  if (e && typeof e === 'object' && 'message' in e) return String((e as { message: unknown }).message)
+  return String(e)
+}
+
+function isAuthError(e: unknown): boolean {
+  const m = errMsg(e)
+  const code = (e as { code?: string })?.code ?? ''
+  return /JWT|jwt|not signed in|owner_id_fkey|401/.test(m) || code === 'PGRST301' || code === '42501'
+}
+
+/** A short, human message for an error; the raw one goes to the console. */
+export function friendlyError(e: unknown): { text: string; action?: Toast['action'] } {
+  console.error(e)
+  if (isNetworkError(e)) return { text: t('sync.offline') }
+  if (isAuthError(e)) return { text: t('error.session'), action: { label: t('error.signIn'), run: () => void signOut() } }
+  return { text: t('error.save') }
+}
+
+// ---------------------------------------------------------------- local cache (offline start)
+const CACHE_KEY = 'sg.cache.v1'
+let cacheTimer: ReturnType<typeof setTimeout> | undefined
+
+function readCache(): { user: AppUser; data: Snapshot } | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    return raw ? (JSON.parse(raw) as { user: AppUser; data: Snapshot }) : null
+  } catch { return null }
+}
+useApp.subscribe((s, prev) => {
+  if (s.phase !== 'ready' || !s.user || (s.data === prev.data && s.user === prev.user)) return
+  clearTimeout(cacheTimer)
+  cacheTimer = setTimeout(() => {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ user: s.user, data: get().data })) } catch { /* quota: ignore */ }
+  }, 400)
+})
+
+// ---------------------------------------------------------------- outbox (offline queue)
+/** A persisted, replayable change. Everything the app writes goes through one of these. */
+type Op =
+  | { k: 'insert'; table: TableName; rows: unknown[] }
+  | { k: 'update'; table: TableName; id: string; patch: Record<string, unknown> }
+  | { k: 'remove'; table: TableName; ids: string[] }
+  | { k: 'settings'; s: Settings }
+  | { k: 'start'; itemId: string; sessionId: string; at: string }
+  | { k: 'stop'; at: string }
+  | { k: 'objects'; keys: string[] }
+interface Queued { op: Op; at: number; uid: string }
+
+const OUTBOX_KEY = 'sg.outbox.v1'
+let outbox: Queued[] = (() => {
+  try { return JSON.parse(localStorage.getItem(OUTBOX_KEY) ?? '[]') as Queued[] } catch { return [] }
+})()
+function saveOutbox() {
+  try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(outbox)) } catch { /* ignore */ }
+  set({ queued: outbox.length })
+}
+set({ queued: outbox.length })
+
 let lastLocalWrite = 0
+let flushing: Promise<void> | null = null
+let retryTimer: ReturnType<typeof setTimeout> | undefined
+let offlineNotified = false
+
+async function runOp(op: Op, fresh: boolean) {
+  switch (op.k) {
+    case 'insert': return backend.insert(op.table, op.rows as never)
+    case 'update': return backend.update(op.table, op.id, op.patch as never)
+    case 'remove': return backend.remove(op.table, op.ids)
+    case 'settings': return backend.saveSettings(op.s)
+    case 'objects': return backend.deleteMediaObjects(op.keys)
+    case 'start': {
+      // Fresh calls use the server clock; replayed ones keep the time the tap really happened.
+      const server = await backend.startTimer(op.itemId, op.sessionId, fresh ? null : op.at)
+      set((st) => ({ data: { ...st.data, sessions: st.data.sessions.map((x) => (x.id === op.sessionId ? { ...x, ...server } : x)) } }))
+      return
+    }
+    case 'stop': {
+      const closed = await backend.stopTimer(fresh ? null : op.at)
+      if (closed) set((st) => ({ data: { ...st.data, sessions: st.data.sessions.map((x) => (x.id === closed.id ? { ...x, ...closed } : x)) } }))
+      return
+    }
+  }
+}
+
+/** Sends queued changes in order. Network failure: keep them and retry later. Other failure: drop + tell. */
+export function flush(): Promise<void> {
+  if (flushing) return flushing
+  flushing = (async () => {
+    let hadError = false
+    while (outbox.length) {
+      const q = outbox[0]
+      const uid = get().user?.id
+      if (!uid) break
+      if (q.uid !== uid) { outbox.shift(); saveOutbox(); continue }
+      try {
+        await runOp(q.op, Date.now() - q.at < 15_000)
+        outbox.shift()
+        saveOutbox()
+      } catch (e) {
+        if (isNetworkError(e)) {
+          if (get().health === 'up') set({ health: 'unreachable' })
+          if (!offlineNotified) { offlineNotified = true; toast(t('sync.offline')) }
+          clearTimeout(retryTimer)
+          retryTimer = setTimeout(() => void resync(), 20_000)
+          break
+        }
+        outbox.shift()
+        saveOutbox()
+        hadError = true
+        const f = friendlyError(e)
+        toast(f.text, 'error', f.action)
+      }
+    }
+    lastLocalWrite = Date.now()
+    if (hadError) await backend.loadAll().then((data) => set({ data })).catch(() => {})
+  })().finally(() => { flushing = null })
+  return flushing
+}
+
+/** Apply a change to the UI at once, queue it, and send it (now if online, later if not). */
+function commit(local: (d: Snapshot) => Snapshot, ops: Op[]): Promise<void> {
+  set((s) => ({ data: local(s.data) }))
+  lastLocalWrite = Date.now()
+  const uid = get().user?.id ?? ''
+  for (const op of ops) outbox.push({ op, at: Date.now(), uid })
+  saveOutbox()
+  return flush()
+}
+
+// ---------------------------------------------------------------- boot / sync
 let unsubRemote: (() => void) | null = null
+let booted = false
+let loading: Promise<void> | null = null
 
 export async function boot() {
+  if (booted) return
+  booted = true
   backend.onAuthChange((user) => {
     const prev = get().user
     set({ user })
-    if (user && (!prev || prev.id !== user.id)) void loadData()
-    if (!user) { set({ phase: 'signedOut', data: emptySnap() }); unsubRemote?.(); unsubRemote = null }
+    if (user && (!prev || prev.id !== user.id)) void flush().then(loadData)
+    if (!user && prev) {
+      set({ phase: 'signedOut', data: emptySnap() })
+      unsubRemote?.(); unsubRemote = null
+      try { localStorage.removeItem(CACHE_KEY) } catch { /* ignore */ }
+    }
   })
+  window.addEventListener('online', () => void resync())
+  window.addEventListener('offline', () => { if (get().health === 'up') set({ health: 'unreachable' }) })
+
+  const cached = readCache()
   const h = await backend.health()
   set({ health: h })
   if (h !== 'up') {
-    // Keep the shell usable; the wake banner takes over.
-    const user = await backend.getUser().catch(() => null)
+    // getUser may try a token refresh that cannot succeed offline: do not wait for it
+    const user = (await Promise.race([backend.getUser().catch(() => null), new Promise<null>((r) => setTimeout(() => r(null), 2500))])) ?? cached?.user ?? null
+    if (user && cached && cached.user.id === user.id) {
+      // Offline (or asleep): open the last copy of the gallery; changes queue up and sync later.
+      set({ user, data: cached.data, phase: 'ready' })
+      return
+    }
     set({ user, phase: user ? 'loading' : 'signedOut' })
     return
   }
   const user = await backend.getUser()
   set({ user })
   if (!user) { set({ phase: 'signedOut' }); return }
+  if (cached && cached.user.id === user.id) set({ data: cached.data, phase: 'ready' }) // instant first paint
+  await flush()
   await loadData()
 }
 
-export async function loadData() {
-  if (get().phase !== 'ready') set({ phase: 'loading' })
-  try {
-    const data = await backend.loadAll()
-    set({ data, phase: 'ready' })
-    if (!unsubRemote) unsubRemote = backend.subscribe(() => scheduleRemoteReload())
-  } catch (e) {
-    const h = await backend.health()
-    set({ health: h })
-    if (h === 'up') toast(t('common.error', { error: errMsg(e) }), 'error')
-  }
+export function loadData(): Promise<void> {
+  if (loading) return loading
+  loading = (async () => {
+    if (get().phase !== 'ready') set({ phase: 'loading' })
+    try {
+      const data = await backend.loadAll()
+      set({ data, phase: 'ready' })
+      if (!unsubRemote) unsubRemote = backend.subscribe(() => scheduleRemoteReload())
+    } catch (e) {
+      const h = await backend.health()
+      set({ health: h })
+      const cached = readCache()
+      if (get().phase !== 'ready' && cached && cached.user.id === get().user?.id) set({ data: cached.data, phase: 'ready' })
+      if (h === 'up') { const f = friendlyError(e); toast(f.text, 'error', f.action) }
+    }
+  })().finally(() => { loading = null })
+  return loading
 }
 
 function scheduleRemoteReload() {
-  // Our own writes echo back through realtime; skip them while writes are in flight.
+  // Our own writes echo back through realtime; wait until nothing is queued or in flight.
   const wait = Math.max(0, lastLocalWrite + 1500 - Date.now())
   setTimeout(() => {
-    if (pending > 0 || Date.now() - lastLocalWrite < 1500) return scheduleRemoteReload()
-    void backend.loadAll().then((data) => set({ data })).catch(() => {})
+    if (outbox.length || flushing || Date.now() - lastLocalWrite < 1500) return scheduleRemoteReload()
+    void backend.loadAll().then((data) => { if (!outbox.length) set({ data }) }).catch(() => {})
   }, wait)
 }
 
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && get().phase === 'ready') scheduleRemoteReload()
+    if (document.visibilityState === 'visible' && get().phase === 'ready') void resync()
   })
 }
 
-export async function checkHealth() {
+/** Back online (or tab visible again): check the server, send queued changes, refresh. */
+export async function resync() {
   const h = await backend.health()
   set({ health: h })
-  return h
+  if (h !== 'up') return
+  offlineNotified = false
+  const hadQueue = outbox.length > 0
+  await flush()
+  if (!get().user) {
+    const user = await backend.getUser().catch(() => null)
+    if (user) set({ user })
+    else { if (get().phase === 'loading') set({ phase: 'signedOut' }); return }
+  }
+  if (hadQueue && !outbox.length) toast(t('sync.synced'))
+  if (get().phase !== 'ready') await loadData()
+  else scheduleRemoteReload()
+}
+
+export async function checkHealth() {
+  await resync()
+  return get().health
 }
 
 export async function wakeUp() {
@@ -121,7 +295,8 @@ export async function wakeUp() {
   try {
     await backend.wake()
   } catch (e) {
-    set({ wakeError: errMsg(e) })
+    set({ wakeError: errMsg(e), health: 'asleep' })
+    return
   }
   const started = Date.now()
   const poll = async (): Promise<void> => {
@@ -129,8 +304,8 @@ export async function wakeUp() {
     if (h === 'up') {
       set({ health: 'up' })
       const user = await backend.getUser()
-      set({ user, phase: user ? 'loading' : 'signedOut' })
-      if (user) await loadData()
+      set({ user, phase: user ? (get().phase === 'ready' ? 'ready' : 'loading') : 'signedOut' })
+      if (user) { await flush(); await loadData() }
       return
     }
     if (Date.now() - started > 8 * 60_000) { set({ health: 'asleep', wakeError: 'timeout' }); return }
@@ -141,31 +316,16 @@ export async function wakeUp() {
   await poll()
 }
 
-function errMsg(e: unknown): string {
-  if (e && typeof e === 'object' && 'message' in e) return String((e as { message: unknown }).message)
-  return String(e)
-}
-
-/** Apply a local change immediately, then persist; on failure reload from the server and toast. */
-async function commit(local: (d: Snapshot) => Snapshot, remote: () => Promise<unknown>) {
-  set((s) => ({ data: local(s.data) }))
-  pending++
-  lastLocalWrite = Date.now()
-  try {
-    await remote()
-  } catch (e) {
-    toast(t('common.error', { error: errMsg(e) }), 'error')
-    try { set({ data: await backend.loadAll() }) } catch { /* ignore */ }
-    throw e
-  } finally {
-    pending--
-    lastLocalWrite = Date.now()
-  }
-}
-const quiet = (p: Promise<unknown>) => p.catch(() => {})
-
 // ---------------------------------------------------------------- auth
-export const signIn = () => backend.signInWithGoogle()
+const NEXT_KEY = 'sg.afterLogin'
+export const signIn = () => {
+  try { if (location.pathname !== '/') sessionStorage.setItem(NEXT_KEY, location.pathname + location.search) } catch { /* ignore */ }
+  return backend.signInWithGoogle()
+}
+/** Where to go after the OAuth round trip (deep link that was open when signing in). */
+export function takeAfterLogin(): string | null {
+  try { const v = sessionStorage.getItem(NEXT_KEY); sessionStorage.removeItem(NEXT_KEY); return v } catch { return null }
+}
 export const signOut = () => backend.signOut()
 
 // ---------------------------------------------------------------- tree helpers
@@ -207,36 +367,29 @@ function expandTemplate(nodes: TemplateNode[], parentId: string, out: Item[]) {
   })
 }
 
+/**
+ * Creates a new item. With a template: the new item gets the template's item title (unless a title is
+ * typed) and tags, and the template's whole sub-item tree inside it.
+ */
 export async function createItem(parentId: string | null, title: string, templateId?: string): Promise<string> {
   const d = get().data
   const tpl = templateId ? d.templates.find((x) => x.id === templateId) : undefined
-  const defaultStatus = d.statuses[0]?.id ?? null
-  const root = newItem(parentId, title || tpl?.item_title || tpl?.name || t('item.untitled'), nextSort(d.items, parentId), {
-    tags: tpl?.tags ?? [], status_id: defaultStatus,
+  const defaultStatus = [...d.statuses].sort((a, b) => a.sort_order - b.sort_order)[0]?.id ?? null
+  const root = newItem(parentId, title.trim() || tpl?.item_title || tpl?.name || t('item.untitled'), nextSort(d.items, parentId), {
+    tags: [...(tpl?.tags ?? [])], status_id: defaultStatus,
   })
   const rows = [root]
   if (tpl) expandTemplate(tpl.tree, root.id, rows)
   for (const r of rows.slice(1)) r.status_id = defaultStatus
-  await commit((s) => ({ ...s, items: [...s.items, ...rows] }), () => backend.insert('items', rows))
+  await commit((s) => ({ ...s, items: [...s.items, ...rows] }), [{ k: 'insert', table: 'items', rows }])
   return root.id
 }
 
-export async function applyTemplate(itemId: string, templateId: string) {
-  const tpl = get().data.templates.find((x) => x.id === templateId)
-  if (!tpl) return
-  const rows: Item[] = []
-  expandTemplate(tpl.tree, itemId, rows)
-  const base = nextSort(get().data.items, itemId)
-  const defaultStatus = get().data.statuses[0]?.id ?? null
-  for (const r of rows) { if (r.parent_id === itemId) r.sort_order += base; r.status_id = defaultStatus }
-  await commit((s) => ({ ...s, items: [...s.items, ...rows] }), () => backend.insert('items', rows))
-}
-
 export function updateItem(id: string, patch: Partial<Item>) {
-  return quiet(commit(
+  return commit(
     (s) => ({ ...s, items: s.items.map((i) => (i.id === id ? { ...i, ...patch, updated_at: now() } : i)) }),
-    () => backend.update('items', id, patch),
-  ))
+    [{ k: 'update', table: 'items', id, patch }],
+  )
 }
 
 export function moveItem(id: string, newParent: string | null) {
@@ -251,6 +404,7 @@ export async function deleteItem(id: string) {
   const media = d.media.filter((m) => ids.has(m.item_id))
   const running = d.sessions.find((s) => !s.ended_at && ids.has(s.item_id))
   if (running) await stopTimer()
+  const keys = media.flatMap((m) => [m.object_key, m.thumb_key].filter(Boolean) as string[])
   await commit(
     (s) => ({
       ...s,
@@ -260,10 +414,7 @@ export async function deleteItem(id: string) {
       cost_lines: s.cost_lines.filter((c) => !ids.has(c.item_id)),
       share_links: s.share_links.filter((l) => !ids.has(l.item_id)),
     }),
-    async () => {
-      await backend.remove('items', [id])
-      await backend.deleteMediaObjects(media.flatMap((m) => [m.object_key, m.thumb_key].filter(Boolean) as string[])).catch(() => {})
-    },
+    [{ k: 'remove', table: 'items', ids: [id] }, ...(keys.length ? [{ k: 'objects', keys } as Op] : [])],
   )
 }
 
@@ -278,101 +429,119 @@ export async function duplicateItem(id: string): Promise<string | null> {
     childrenOf(d.items, it.id).forEach((k, i) => copy(k, c.id, i + 1, ''))
   }
   copy(src, src.parent_id, nextSort(d.items, src.parent_id), ' (copy)')
-  await commit((s) => ({ ...s, items: [...s.items, ...rows] }), () => backend.insert('items', rows))
+  await commit((s) => ({ ...s, items: [...s.items, ...rows] }), [{ k: 'insert', table: 'items', rows }])
   return rows[0].id
 }
 
 // ---------------------------------------------------------------- timer
-export async function startTimer(itemId: string) {
+export function startTimer(itemId: string) {
   const sid = uuid()
   const ts = now()
-  await quiet(commit(
+  return commit(
     (s) => ({
       ...s,
       sessions: [...s.sessions.map((x) => (x.ended_at ? x : { ...x, ended_at: ts })), { id: sid, item_id: itemId, started_at: ts, ended_at: null }],
     }),
-    async () => {
-      const server = await backend.startTimer(itemId, sid)
-      // Adopt the server's clock for the new session and the one it closed.
-      set((st) => ({ data: { ...st.data, sessions: st.data.sessions.map((x) => (x.id === sid ? { ...x, ...server } : x)) } }))
-    },
-  ))
+    [{ k: 'start', itemId, sessionId: sid, at: ts }],
+  )
 }
 
-export async function stopTimer() {
+export function stopTimer() {
   const ts = now()
-  await quiet(commit(
+  return commit(
     (s) => ({ ...s, sessions: s.sessions.map((x) => (x.ended_at ? x : { ...x, ended_at: ts })) }),
-    async () => {
-      const closed = await backend.stopTimer()
-      if (closed) set((st) => ({ data: { ...st.data, sessions: st.data.sessions.map((x) => (x.id === closed.id ? { ...x, ...closed } : x)) } }))
-    },
-  ))
+    [{ k: 'stop', at: ts }],
+  )
 }
 
 export function addSession(itemId: string, startedAt: string, endedAt: string) {
   const row: Session = { id: uuid(), item_id: itemId, started_at: startedAt, ended_at: endedAt }
-  return quiet(commit((s) => ({ ...s, sessions: [...s.sessions, row] }), () => backend.insert('sessions', [row])))
+  return commit((s) => ({ ...s, sessions: [...s.sessions, row] }), [{ k: 'insert', table: 'sessions', rows: [row] }])
 }
 export function updateSession(id: string, patch: Partial<Session>) {
-  return quiet(commit(
+  return commit(
     (s) => ({ ...s, sessions: s.sessions.map((x) => (x.id === id ? { ...x, ...patch } : x)) }),
-    () => backend.update('sessions', id, patch),
-  ))
+    [{ k: 'update', table: 'sessions', id, patch }],
+  )
 }
 export function deleteSession(id: string) {
-  return quiet(commit((s) => ({ ...s, sessions: s.sessions.filter((x) => x.id !== id) }), () => backend.remove('sessions', [id])))
+  return commit((s) => ({ ...s, sessions: s.sessions.filter((x) => x.id !== id) }), [{ k: 'remove', table: 'sessions', ids: [id] }])
 }
 
 // ---------------------------------------------------------------- media
+const uploadFilesById = new Map<string, File>()
+
+async function runUpload(uid: string, itemId: string, file: File) {
+  const setU = (patch: Partial<Upload>) => set((s) => ({ uploads: s.uploads.map((u) => (u.id === uid ? { ...u, ...patch } : u)) }))
+  setU({ progress: 0, error: undefined })
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) { setU({ error: t('upload.offline') }); return }
+  let res: Awaited<ReturnType<typeof backend.uploadMedia>> | null = null
+  try {
+    const prep = await makeUploadParts(file)
+    res = await backend.uploadMedia(itemId, prep.parts, (p) => setU({ progress: p }))
+    const row: Media = {
+      id: uuid(), item_id: itemId, object_key: res.object_key, thumb_key: res.thumb_key, kind: prep.kind,
+      mime: file.type, size_bytes: file.size, width: prep.width, height: prep.height, duration_s: prep.duration,
+      phase: 'process', created_at: now(),
+    }
+    try {
+      await backend.insert('media', [row])
+    } catch (e) {
+      if (!isNetworkError(e)) throw e
+      outbox.push({ op: { k: 'insert', table: 'media', rows: [row] }, at: Date.now(), uid: get().user?.id ?? '' }) // stored; row syncs later
+      saveOutbox()
+    }
+    set((s) => ({ data: { ...s.data, media: [...s.data.media, row] }, uploads: s.uploads.filter((u) => u.id !== uid) }))
+    uploadFilesById.delete(uid)
+    lastLocalWrite = Date.now()
+    // First photo becomes the cover automatically.
+    const it = get().data.items.find((i) => i.id === itemId)
+    if (it && !it.cover_media_id) void updateItem(itemId, { cover_media_id: row.id })
+  } catch (e) {
+    // Final failure: nothing may stay behind in storage without a row pointing at it.
+    if (res) await backend.deleteMediaObjects([res.object_key, res.thumb_key].filter(Boolean) as string[]).catch(() => {})
+    console.error('upload failed', e)
+    setU({ error: isNetworkError(e) ? t('upload.offline') : t('upload.failed') })
+  }
+}
+
 export async function uploadFiles(itemId: string, files: File[]) {
   const accepted = files.filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'))
-  await Promise.all(accepted.map(async (file) => {
+  await Promise.all(accepted.map((file) => {
     const uid = uuid()
+    uploadFilesById.set(uid, file)
     set((s) => ({ uploads: [...s.uploads, { id: uid, itemId, name: file.name, progress: 0 }] }))
-    const setProgress = (p: number) => set((s) => ({ uploads: s.uploads.map((u) => (u.id === uid ? { ...u, progress: p } : u)) }))
-    try {
-      const prep = await makeUploadParts(file)
-      const res = await backend.uploadMedia(itemId, prep.parts, setProgress)
-      const row: Media = {
-        id: uuid(), item_id: itemId, object_key: res.object_key, thumb_key: res.thumb_key, kind: prep.kind,
-        mime: file.type, size_bytes: file.size, width: prep.width, height: prep.height, duration_s: prep.duration,
-        phase: 'process', created_at: now(),
-      }
-      await commit((s) => ({ ...s, media: [...s.media, row] }), () => backend.insert('media', [row]))
-      // First photo becomes the cover automatically.
-      const it = get().data.items.find((i) => i.id === itemId)
-      if (it && !it.cover_media_id) void updateItem(itemId, { cover_media_id: row.id })
-      set((s) => ({ uploads: s.uploads.filter((u) => u.id !== uid) }))
-    } catch (e) {
-      set((s) => ({ uploads: s.uploads.map((u) => (u.id === uid ? { ...u, error: errMsg(e) } : u)) }))
-      toast(`${file.name}: ${errMsg(e)}`, 'error')
-      setTimeout(() => set((s) => ({ uploads: s.uploads.filter((u) => u.id !== uid) })), 6000)
-    }
+    return runUpload(uid, itemId, file)
   }))
+}
+export function retryUpload(uid: string) {
+  const u = get().uploads.find((x) => x.id === uid)
+  const f = uploadFilesById.get(uid)
+  if (u && f) void runUpload(uid, u.itemId, f)
+}
+export function dismissUpload(uid: string) {
+  uploadFilesById.delete(uid)
+  set((s) => ({ uploads: s.uploads.filter((u) => u.id !== uid) }))
 }
 
 export function updateMedia(id: string, patch: Partial<Media>) {
-  return quiet(commit(
+  return commit(
     (s) => ({ ...s, media: s.media.map((m) => (m.id === id ? { ...m, ...patch } : m)) }),
-    () => backend.update('media', id, patch),
-  ))
+    [{ k: 'update', table: 'media', id, patch }],
+  )
 }
 
 export async function deleteMedia(id: string) {
   const m = get().data.media.find((x) => x.id === id)
   if (!m) return
-  await quiet(commit(
+  await commit(
     (s) => ({
       ...s,
       media: s.media.filter((x) => x.id !== id),
       items: s.items.map((i) => (i.cover_media_id === id ? { ...i, cover_media_id: null } : i)),
     }),
-    async () => {
-      await backend.remove('media', [id])
-      await backend.deleteMediaObjects([m.object_key, m.thumb_key].filter(Boolean) as string[]).catch(() => {})
-    },
-  ))
+    [{ k: 'remove', table: 'media', ids: [id] }, { k: 'objects', keys: [m.object_key, m.thumb_key].filter(Boolean) as string[] }],
+  )
 }
 
 const inflight = new Set<string>()
@@ -393,36 +562,36 @@ export async function ensureUrls(keys: string[]) {
 // ---------------------------------------------------------------- costs
 export function addCost(itemId: string, label: string) {
   const row: CostLine = { id: uuid(), item_id: itemId, label, qty: 1, unit_cost: 0, created_at: now() }
-  void quiet(commit((s) => ({ ...s, cost_lines: [...s.cost_lines, row] }), () => backend.insert('cost_lines', [row])))
+  void commit((s) => ({ ...s, cost_lines: [...s.cost_lines, row] }), [{ k: 'insert', table: 'cost_lines', rows: [row] }])
   return row.id
 }
 export function updateCost(id: string, patch: Partial<CostLine>) {
-  return quiet(commit(
+  return commit(
     (s) => ({ ...s, cost_lines: s.cost_lines.map((c) => (c.id === id ? { ...c, ...patch } : c)) }),
-    () => backend.update('cost_lines', id, patch),
-  ))
+    [{ k: 'update', table: 'cost_lines', id, patch }],
+  )
 }
 export function deleteCost(id: string) {
-  return quiet(commit((s) => ({ ...s, cost_lines: s.cost_lines.filter((c) => c.id !== id) }), () => backend.remove('cost_lines', [id])))
+  return commit((s) => ({ ...s, cost_lines: s.cost_lines.filter((c) => c.id !== id) }), [{ k: 'remove', table: 'cost_lines', ids: [id] }])
 }
 
 // ---------------------------------------------------------------- statuses
 export function addStatus(name: string, color: string) {
   const d = get().data
   const row: Status = { id: uuid(), name, color, sort_order: d.statuses.length ? Math.max(...d.statuses.map((s) => s.sort_order)) + 1 : 0 }
-  return quiet(commit((s) => ({ ...s, statuses: [...s.statuses, row] }), () => backend.insert('statuses', [row])))
+  return commit((s) => ({ ...s, statuses: [...s.statuses, row] }), [{ k: 'insert', table: 'statuses', rows: [row] }])
 }
 export function updateStatus(id: string, patch: Partial<Status>) {
-  return quiet(commit(
+  return commit(
     (s) => ({ ...s, statuses: s.statuses.map((x) => (x.id === id ? { ...x, ...patch } : x)) }),
-    () => backend.update('statuses', id, patch),
-  ))
+    [{ k: 'update', table: 'statuses', id, patch }],
+  )
 }
 export function deleteStatus(id: string) {
-  return quiet(commit(
+  return commit(
     (s) => ({ ...s, statuses: s.statuses.filter((x) => x.id !== id), items: s.items.map((i) => (i.status_id === id ? { ...i, status_id: null } : i)) }),
-    () => backend.remove('statuses', [id]),
-  ))
+    [{ k: 'remove', table: 'statuses', ids: [id] }],
+  )
 }
 export async function moveStatus(id: string, dir: -1 | 1) {
   const list = [...get().data.statuses].sort((a, b) => a.sort_order - b.sort_order)
@@ -432,10 +601,7 @@ export async function moveStatus(id: string, dir: -1 | 1) {
   ;[list[i], list[j]] = [list[j], list[i]]
   const renum = list.map((s, k) => ({ ...s, sort_order: k }))
   const changed = renum.filter((s) => get().data.statuses.find((o) => o.id === s.id)?.sort_order !== s.sort_order)
-  await quiet(commit(
-    (s) => ({ ...s, statuses: renum }),
-    () => Promise.all(changed.map((c) => backend.update('statuses', c.id, { sort_order: c.sort_order }))),
-  ))
+  await commit((s) => ({ ...s, statuses: renum }), changed.map((c) => ({ k: 'update', table: 'statuses', id: c.id, patch: { sort_order: c.sort_order } }) as Op))
 }
 
 // ---------------------------------------------------------------- templates
@@ -445,26 +611,33 @@ function toTree(items: Item[], parentId: string): TemplateNode[] {
     return { title: c.title, ...(c.tags.length ? { tags: c.tags } : {}), ...(kids.length ? { children: kids } : {}) }
   })
 }
-export async function saveAsTemplate(itemId: string) {
+export function findTemplateByName(name: string): Template | undefined {
+  const n = name.trim().toLowerCase()
+  return get().data.templates.find((x) => x.name.trim().toLowerCase() === n)
+}
+/** Saves an item (its title, tags and whole sub-item tree) as a template. Replaces a template of the same name. */
+export async function saveAsTemplate(itemId: string, name: string) {
   const d = get().data
   const it = d.items.find((i) => i.id === itemId)
-  if (!it) return
-  const row: Template = { id: uuid(), name: it.title, item_title: it.title, tags: it.tags, tree: toTree(d.items, itemId), created_at: now() }
-  await quiet(commit((s) => ({ ...s, templates: [...s.templates, row] }), () => backend.insert('templates', [row])))
-  toast(t('item.templateSaved', { name: row.name }))
+  if (!it || !name.trim()) return
+  const body = { name: name.trim(), item_title: it.title, tags: [...it.tags], tree: toTree(d.items, itemId) }
+  const existing = findTemplateByName(name)
+  if (existing) await updateTemplate(existing.id, body)
+  else await addTemplate(body)
+  toast(t('item.templateSaved', { name: body.name }))
 }
 export function addTemplate(tpl: Omit<Template, 'id' | 'created_at'>) {
   const row: Template = { ...tpl, id: uuid(), created_at: now() }
-  return quiet(commit((s) => ({ ...s, templates: [...s.templates, row] }), () => backend.insert('templates', [row])))
+  return commit((s) => ({ ...s, templates: [...s.templates, row] }), [{ k: 'insert', table: 'templates', rows: [row] }])
 }
 export function updateTemplate(id: string, patch: Partial<Template>) {
-  return quiet(commit(
+  return commit(
     (s) => ({ ...s, templates: s.templates.map((x) => (x.id === id ? { ...x, ...patch } : x)) }),
-    () => backend.update('templates', id, patch),
-  ))
+    [{ k: 'update', table: 'templates', id, patch }],
+  )
 }
 export function deleteTemplate(id: string) {
-  return quiet(commit((s) => ({ ...s, templates: s.templates.filter((x) => x.id !== id) }), () => backend.remove('templates', [id])))
+  return commit((s) => ({ ...s, templates: s.templates.filter((x) => x.id !== id) }), [{ k: 'remove', table: 'templates', ids: [id] }])
 }
 
 // ---------------------------------------------------------------- share links
@@ -474,22 +647,22 @@ function token(): string {
 }
 export async function createShare(itemId: string): Promise<ShareLink> {
   const row: ShareLink = { id: uuid(), item_id: itemId, token: token(), created_at: now(), revoked_at: null }
-  await commit((s) => ({ ...s, share_links: [...s.share_links, row] }), () => backend.insert('share_links', [row]))
+  await commit((s) => ({ ...s, share_links: [...s.share_links, row] }), [{ k: 'insert', table: 'share_links', rows: [row] }])
   return row
 }
 export function revokeShare(id: string) {
   const ts = now()
-  return quiet(commit(
+  return commit(
     (s) => ({ ...s, share_links: s.share_links.map((l) => (l.id === id ? { ...l, revoked_at: ts } : l)) }),
-    () => backend.update('share_links', id, { revoked_at: ts }),
-  ))
+    [{ k: 'update', table: 'share_links', id, patch: { revoked_at: ts } }],
+  )
 }
 export const shareUrl = (l: ShareLink) => `${window.location.origin}/s/${l.token}`
 
 // ---------------------------------------------------------------- settings
 export function saveSettings(patch: Partial<Settings>) {
   const next = { ...get().data.settings, ...patch }
-  return quiet(commit((s) => ({ ...s, settings: next }), () => backend.saveSettings(next)))
+  return commit((s) => ({ ...s, settings: next }), [{ k: 'settings', s: next }])
 }
 
 export { backend }

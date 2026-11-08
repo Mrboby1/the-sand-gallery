@@ -45,6 +45,7 @@ export function NotesTab({ item }: { item: Item }) {
         value={text}
         onChange={(e) => onChange(e.target.value)}
         placeholder={t('notes.placeholder')}
+        dir="auto"
         className="block w-full resize-none rounded-3xl border border-line bg-surface p-5 text-[16px] leading-relaxed text-ink outline-none transition placeholder:text-muted/60 focus:border-accent focus:ring-2 focus:ring-accent/20"
       />
       <div className="mt-2 h-4 text-right text-xs text-muted">{state === 'saving' ? t('notes.saving') : state === 'saved' ? t('notes.saved') : ''}</div>
@@ -139,13 +140,22 @@ export function TimeLogTab({ item, hasChildren }: { item: Item; hasChildren: boo
 }
 
 function SessionSheet({ itemId, session, onClose }: { itemId: string; session: Session | null; onClose: () => void }) {
+  const all = useApp((s) => s.data.sessions)
+  const byId = useApp((s) => s.data.items)
+  const runningNow = all.find((x) => !x.ended_at)
   const defEnd = new Date()
   defEnd.setSeconds(0, 0)
+  // A new manual session ends where a running timer started, so they do not overlap.
+  if (!session && runningNow && Date.parse(runningNow.started_at) < defEnd.getTime()) defEnd.setTime(Date.parse(runningNow.started_at))
   const defStart = new Date(defEnd.getTime() - MS_HOUR)
   const [start, setStart] = useState(toLocalInput(session?.started_at ?? defStart.toISOString()))
   const [end, setEnd] = useState(toLocalInput(session?.ended_at ?? defEnd.toISOString()))
-  const valid = start && end && new Date(end).getTime() > new Date(start).getTime()
-  const dur = valid ? new Date(end).getTime() - new Date(start).getTime() : 0
+  const ordered = !!start && !!end && new Date(end).getTime() > new Date(start).getTime()
+  const a = ordered ? new Date(start).getTime() : 0
+  const b = ordered ? new Date(end).getTime() : 0
+  const clash = ordered ? all.find((x) => x.id !== session?.id && Date.parse(x.started_at) < b && (x.ended_at ? Date.parse(x.ended_at) : Date.now()) > a) : undefined
+  const valid = ordered && !clash
+  const dur = ordered ? b - a : 0
   return (
     <Sheet open onClose={onClose} title={session ? t('log.edit') : t('log.add')}>
       <form
@@ -161,7 +171,9 @@ function SessionSheet({ itemId, session, onClose }: { itemId: string; session: S
       >
         <Field label={t('log.start')}><Input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} required /></Field>
         <Field label={t('log.end')}><Input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} required /></Field>
-        <div className={cx('text-sm', valid ? 'text-muted' : 'text-danger')}>{valid ? fmtDuration(dur) : t('log.invalid')}</div>
+        <div className={cx('text-sm', valid ? 'text-muted' : 'text-danger')}>
+          {!ordered ? t('log.invalid') : clash ? t('log.overlap', { title: byId.find((i) => i.id === clash.item_id)?.title ?? '…', range: `${new Date(clash.started_at).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}–${clash.ended_at ? new Date(clash.ended_at).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : t('log.running')}` }) : fmtDuration(dur)}
+        </div>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
           <Button type="submit" variant="primary" disabled={!valid}>{t('common.save')}</Button>
@@ -254,6 +266,7 @@ function CostInput({ value, onCommit, numeric, placeholder, autoFocus }: { value
   return (
     <input
       value={v}
+      dir={numeric ? undefined : 'auto'}
       autoFocus={autoFocus}
       placeholder={placeholder}
       inputMode={numeric ? 'decimal' : undefined}

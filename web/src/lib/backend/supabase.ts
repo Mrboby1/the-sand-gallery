@@ -93,7 +93,8 @@ export class SupabaseBackend implements Backend {
 
   async insert<T extends TableName>(table: T, rows: TableRow[T][]) {
     const { error } = await this.sb.from(table).insert(rows.map((r) => strip(r)))
-    if (error) throw error
+    // 23505 = duplicate key: a retried insert that already succeeded (inserts are one atomic statement)
+    if (error && error.code !== '23505') throw error
   }
   async update<T extends TableName>(table: T, id: string, patch: Partial<TableRow[T]>) {
     const { error } = await this.sb.from(table).update(strip(patch) as never).eq('id', id)
@@ -110,13 +111,13 @@ export class SupabaseBackend implements Backend {
     if (error) throw error
   }
 
-  async startTimer(itemId: string, sessionId: string): Promise<Session> {
-    const { data, error } = await this.sb.rpc('start_timer', { p_item: itemId, p_session: sessionId })
+  async startTimer(itemId: string, sessionId: string, at?: string | null): Promise<Session> {
+    const { data, error } = await this.sb.rpc('start_timer', { p_item: itemId, p_session: sessionId, p_at: at ?? null })
     if (error) throw error
     return data as Session
   }
-  async stopTimer(): Promise<Session | null> {
-    const { data, error } = await this.sb.rpc('stop_timer')
+  async stopTimer(at?: string | null): Promise<Session | null> {
+    const { data, error } = await this.sb.rpc('stop_timer', { p_at: at ?? null })
     if (error) throw error
     return (data as Session | null) ?? null
   }
@@ -132,13 +133,23 @@ export class SupabaseBackend implements Backend {
   }
 
   // ---------- worker calls ----------
-  private async api<T>(path: string, init: RequestInit = {}, auth = true): Promise<T> {
-    const headers = new Headers(init.headers)
-    if (auth) headers.set('Authorization', `Bearer ${await this.token()}`)
-    if (init.body) headers.set('Content-Type', 'application/json')
-    const res = await fetch(this.cfg.workerUrl.replace(/\/$/, '') + path, { ...init, headers })
-    if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text().catch(() => '')}`)
-    return (await res.json()) as T
+  /** Worker call with retries on network errors and 5xx (exponential backoff). */
+  private async api<T>(path: string, init: RequestInit = {}, auth = true, attempts = 3): Promise<T> {
+    for (let i = 0; ; i++) {
+      try {
+        const headers = new Headers(init.headers)
+        if (auth) headers.set('Authorization', `Bearer ${await this.token()}`)
+        if (init.body) headers.set('Content-Type', 'application/json')
+        const res = await fetch(this.cfg.workerUrl.replace(/\/$/, '') + path, { ...init, headers })
+        if (res.status >= 500 && i < attempts - 1) throw new RetryableError(`${path}: ${res.status}`)
+        if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text().catch(() => '')}`)
+        return (await res.json()) as T
+      } catch (e) {
+        const retry = e instanceof RetryableError || isNetworkError(e)
+        if (!retry || i >= attempts - 1) throw e
+        await sleep(700 * 2 ** i)
+      }
+    }
   }
 
   async uploadMedia(itemId: string, parts: UploadPart[], onProgress?: (f: number) => void): Promise<UploadResult> {
@@ -149,10 +160,22 @@ export class SupabaseBackend implements Backend {
     const total = parts.reduce((n, p) => n + p.blob.size, 0) || 1
     let done = 0
     const result: UploadResult = { object_key: '', thumb_key: null }
-    for (let i = 0; i < parts.length; i++) {
-      const p = parts[i]
-      const s = signed[i]
-      await putWithProgress(s.url, p.blob, p.contentType, (loaded) => onProgress?.((done + loaded) / total))
+    // original first: it is the part that matters
+    const order = parts.map((p, i) => ({ p, s: signed[i] })).sort((a, b) => (a.p.role === 'original' ? -1 : 0) - (b.p.role === 'original' ? -1 : 0))
+    for (const { p, s } of order) {
+      try {
+        await withRetry(() => putWithProgress(s.url, p.blob, p.contentType, (loaded) => onProgress?.((done + loaded) / total)))
+      } catch (e) {
+        if (p.role === 'thumb') {
+          // A missing thumbnail is not worth losing the photo: the original is shown instead.
+          console.warn('thumbnail upload failed, continuing without it', e)
+          await this.deleteMediaObjects([s.key]).catch(() => {})
+          continue
+        }
+        // Original failed: remove anything already stored so nothing is orphaned.
+        await this.deleteMediaObjects(signed.map((x) => x.key)).catch(() => {})
+        throw e
+      }
       done += p.blob.size
       if (p.role === 'thumb') result.thumb_key = s.key
       else result.object_key = s.key
@@ -198,10 +221,15 @@ export class SupabaseBackend implements Backend {
 
   // ---------- wake-up ----------
   async health(): Promise<HealthState> {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'unreachable'
     try {
-      const r = await withTimeout(this.sb.from('statuses').select('id').limit(1), 7000)
-      if (!r.error) return 'up'
-      if (r.status && r.status < 500 && r.status !== 0) return 'up' // DB answered (e.g. auth error), so it is awake
+      // rpc/ping touches the database and is allowed for anon (no 401 on the login page)
+      const res = await withTimeout(fetch(`${this.cfg.supabaseUrl}/rest/v1/rpc/ping`, {
+        method: 'POST',
+        headers: { apikey: this.cfg.supabaseAnonKey, 'Content-Type': 'application/json' },
+        body: '{}',
+      }), 4000)
+      if (res.status < 500) return 'up'
     } catch { /* fall through to the worker */ }
     try {
       const res = await withTimeout(fetch(`${this.cfg.workerUrl.replace(/\/$/, '')}/api/health`), 8000)
@@ -212,9 +240,42 @@ export class SupabaseBackend implements Backend {
     }
   }
   async wake() {
-    const res = await fetch(`${this.cfg.workerUrl.replace(/\/$/, '')}/api/wake`, { method: 'POST' })
+    // The auth server sleeps with the DB, so send the stored token as-is (the Worker accepts a recently
+    // expired one: it only proves this browser belongs to a real user of the gallery).
+    const headers: Record<string, string> = {}
+    const tok = storedAccessToken(this.cfg.supabaseUrl)
+    if (tok) headers.Authorization = `Bearer ${tok}`
+    const res = await fetch(`${this.cfg.workerUrl.replace(/\/$/, '')}/api/wake`, { method: 'POST', headers })
+    if (res.status === 429) throw new Error('please wait a minute and try again')
     if (!res.ok) throw new Error(`wake: ${res.status}`)
   }
+}
+
+class RetryableError extends Error {}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** True for 'could not reach the server' errors (offline, DNS, CORS-less network failure). */
+export function isNetworkError(e: unknown): boolean {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
+  const m = String((e as { message?: unknown })?.message ?? e)
+  return /Failed to fetch|NetworkError|Load failed|network|timeout/i.test(m)
+}
+
+async function withRetry<T>(fn: () => Promise<T>, attempts = 4): Promise<T> {
+  for (let i = 0; ; i++) {
+    try { return await fn() } catch (e) {
+      if (i >= attempts - 1) throw e
+      await sleep(800 * 2 ** i)
+    }
+  }
+}
+
+function storedAccessToken(supabaseUrl: string): string | null {
+  try {
+    const ref = new URL(supabaseUrl).hostname.split('.')[0]
+    const raw = localStorage.getItem(`sb-${ref}-auth-token`)
+    return raw ? (JSON.parse(raw) as { access_token?: string }).access_token ?? null : null
+  } catch { return null }
 }
 
 function strip<T extends object>(row: T): T {

@@ -53,10 +53,10 @@ function FlatItemTile({
         )}
         {status && size !== 's' && <StatusPill status={status} size="xs" className="absolute left-2 top-2" />}
         {size === 's' && status && <span className="absolute left-1.5 top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-surface" style={{ background: status.color }} />}
-        {running && <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white dark:text-[#1d1813]"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />{fmtDuration(total)}</span>}
+        {running && <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-medium text-on-primary"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />{fmtDuration(total)}</span>}
       </div>
       <div className={cx('px-0.5', size === 's' ? 'pt-1.5' : 'pt-2.5')}>
-        <div className={cx('font-medium leading-snug text-ink', size === 's' ? 'line-clamp-1 text-[12px]' : size === 'm' ? 'line-clamp-2 text-[15px]' : 'line-clamp-2 text-[17px]')}>
+        <div dir="auto" className={cx('font-medium leading-snug text-ink [overflow-wrap:anywhere]', size === 's' ? 'line-clamp-1 text-[12px]' : size === 'm' ? 'line-clamp-2 text-[15px]' : 'line-clamp-2 text-[17px]')}>
           {item.title}
         </div>
         {size !== 's' && (
@@ -106,7 +106,7 @@ function GlossyItemTile({
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-[#1a120a]/80 via-[#1a120a]/25 to-transparent" />
         {status && size !== 's' && <StatusPill status={status} size="xs" className="absolute left-2.5 top-2.5 shadow-sm" />}
         <div className="absolute inset-x-0 bottom-0 p-3 text-white">
-          <div className={cx('font-display font-semibold leading-tight drop-shadow-sm', size === 's' ? 'line-clamp-2 text-[13px]' : size === 'm' ? 'line-clamp-2 text-[17px]' : 'line-clamp-2 text-xl')}>
+          <div dir="auto" className={cx('font-display font-semibold leading-tight drop-shadow-sm [overflow-wrap:anywhere]', size === 's' ? 'line-clamp-2 text-[13px]' : size === 'm' ? 'line-clamp-2 text-[17px]' : 'line-clamp-2 text-xl')}>
             {item.title}
           </div>
           {size !== 's' && (
@@ -144,7 +144,7 @@ export function ItemRow({
         {!cover && <Layers size={20} strokeWidth={1.5} className="absolute inset-0 m-auto text-accent/50" />}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">{item.title}</div>
+        <div dir="auto" className="truncate font-medium">{item.title}</div>
         <div className="mt-0.5 flex items-center gap-2 truncate text-xs text-muted">
           {path && <span className="truncate">{path}</span>}
           {!path && kids > 0 && <span>{tn('item.subitems', kids)}</span>}
