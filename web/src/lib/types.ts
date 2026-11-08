@@ -106,8 +106,10 @@ export interface Settings {
   due_dates_enabled: boolean
   /** Timer notification + reminders (all devices). */
   notify_enabled: boolean
-  /** "Still working?" reminder every N hours while a timer runs; 0 = off. */
+  /** Legacy (whole hours); kept for older app versions. */
   reminder_hours: number
+  /** "Still working?" reminder every N minutes while a timer runs (from 15); 0 = off. */
+  reminder_minutes: number
   /** Colour hues 0-360 chosen in Settings > Appearance; null = original colours. */
   hg_hue: number | null
   sand_hue: number | null
@@ -161,6 +163,7 @@ export const DEFAULT_SETTINGS: Settings = {
   due_dates_enabled: false,
   notify_enabled: true,
   reminder_hours: 2,
+  reminder_minutes: 120,
   hg_hue: null,
   sand_hue: null,
   bg_hue: null,

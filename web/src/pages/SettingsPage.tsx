@@ -14,7 +14,7 @@ import { TopBar } from '../components/Shell'
 import { Button, Field, IconButton, Input, Sheet, Switch, confirmDialog, cx } from '../components/ui'
 import { useMoney } from '../components/Tabs'
 import { onColor } from '../components/StatusPill'
-import { t, tn } from '../i18n'
+import { t, tn, locale } from '../i18n'
 import { clearTimer, disablePush, ensurePush, permission, requestNotifications } from '../lib/notify'
 
 const CURRENCIES = ['ILS', 'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF', 'JPY']
@@ -100,13 +100,9 @@ export function SettingsPage() {
             </span>
             <Switch checked={s.due_dates_enabled} onChange={(v) => saveSettings({ due_dates_enabled: v })} label={t('settings.dueDates')} />
           </label>
-          <div className="mt-4 flex items-center justify-between gap-4">
+          <div className="mt-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <span className="font-medium">{t('settings.weekStarts')}</span>
-            <Segmented
-              value={String(s.week_starts_on)}
-              options={[{ v: '0', l: t('settings.sunday') }, { v: '1', l: t('settings.monday') }]}
-              onChange={(v) => saveSettings({ week_starts_on: Number(v) })}
-            />
+            <WeekStartPicker value={s.week_starts_on} />
           </div>
         </Section>
 
@@ -231,13 +227,9 @@ function NotificationsSection() {
           }}
         />
       </label>
-      <div className="mt-4 flex items-center justify-between gap-4">
+      <div className="mt-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <span className="font-medium">{t('notif.reminder')}</span>
-        <Segmented
-          value={String(s.reminder_hours)}
-          options={[{ v: '0', l: t('notif.off') }, { v: '1', l: '1h' }, { v: '2', l: '2h' }, { v: '4', l: '4h' }]}
-          onChange={(v) => saveSettings({ reminder_hours: Number(v) })}
-        />
+        <ReminderPicker value={s.reminder_minutes ?? s.reminder_hours * 60} />
       </div>
       <p className="mt-4 text-[13px] text-muted">{t(stateKey)}</p>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -330,6 +322,79 @@ function ColorControls() {
         })}
       </div>
     </div>
+  )
+}
+
+const dayName = (d: number) => new Date(2024, 0, 7 + d).toLocaleDateString(locale, { weekday: 'long' }) // 2024-01-07 is a Sunday
+
+/** Sunday / Monday / Other…: "Other" opens a picker with all 7 days and then shows the chosen day. */
+function WeekStartPicker({ value }: { value: number }) {
+  const [open, setOpen] = useState(false)
+  const other = value !== 0 && value !== 1
+  return (
+    <>
+      <Segmented
+        value={other ? 'other' : String(value)}
+        options={[{ v: '0', l: t('settings.sunday') }, { v: '1', l: t('settings.monday') }, { v: 'other', l: other ? dayName(value) : t('settings.other') }]}
+        onChange={(v) => (v === 'other' ? setOpen(true) : saveSettings({ week_starts_on: Number(v) }))}
+      />
+      <Sheet open={open} onClose={() => setOpen(false)} title={t('settings.weekStarts')}>
+        <div className="flex flex-col gap-1">
+          {[0, 1, 2, 3, 4, 5, 6].map((d) => (
+            <button
+              key={d}
+              onClick={() => { void saveSettings({ week_starts_on: d }); setOpen(false) }}
+              className={cx('flex items-center justify-between rounded-xl px-3 py-3 text-left transition hover:bg-surface-2', value === d && 'bg-accent-soft font-medium')}
+            >
+              {dayName(d)}
+              {value === d && <Check size={16} />}
+            </button>
+          ))}
+        </div>
+      </Sheet>
+    </>
+  )
+}
+
+const fmtMinutes = (m: number) => (m % 60 ? (m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`) : `${m / 60}h`)
+
+/** Off / 1h / 2h / 4h / Custom…: any interval from 15 minutes (the reminder check runs every 15 minutes). */
+function ReminderPicker({ value }: { value: number }) {
+  const presets = [0, 60, 120, 240]
+  const custom = !presets.includes(value)
+  const [open, setOpen] = useState(false)
+  const [h, setH] = useState(String(Math.floor(value / 60)))
+  const [m, setM] = useState(String(value % 60))
+  const total = (Number(h) || 0) * 60 + (Number(m) || 0)
+  const ok = total >= 15 && total <= 10080
+  return (
+    <>
+      <Segmented
+        value={custom ? 'custom' : String(value)}
+        options={[...presets.map((p) => ({ v: String(p), l: p ? fmtMinutes(p) : t('notif.off') })), { v: 'custom', l: custom ? fmtMinutes(value) : t('notif.custom') }]}
+        onChange={(v) => {
+          if (v === 'custom') { setH(String(Math.floor((value || 90) / 60))); setM(String((value || 90) % 60)); setOpen(true) }
+          else void saveSettings({ reminder_minutes: Number(v), ...(Number(v) % 60 === 0 && [0, 1, 2, 4].includes(Number(v) / 60) ? { reminder_hours: Number(v) / 60 } : {}) })
+        }}
+      />
+      <Sheet open={open} onClose={() => setOpen(false)} title={t('notif.customTitle')}>
+        <form
+          onSubmit={(e) => { e.preventDefault(); if (ok) { void saveSettings({ reminder_minutes: total }); setOpen(false) } }}
+          className="flex flex-col gap-4"
+        >
+          <div className="flex items-end gap-3">
+            <Field label={t('notif.hours')}><Input type="number" inputMode="numeric" min={0} max={168} value={h} onChange={(e) => setH(e.target.value)} className="w-24" /></Field>
+            <Field label={t('notif.minutes')}><Input type="number" inputMode="numeric" min={0} max={59} step={5} value={m} onChange={(e) => setM(e.target.value)} className="w-24" /></Field>
+            <span className="pb-2 text-sm text-muted">= {ok ? fmtMinutes(total) : '—'}</span>
+          </div>
+          <p className={cx('text-[13px]', ok ? 'text-muted' : 'text-danger')}>{t('notif.customHint')}</p>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" variant="primary" disabled={!ok}>{t('common.save')}</Button>
+          </div>
+        </form>
+      </Sheet>
+    </>
   )
 }
 

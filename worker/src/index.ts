@@ -17,7 +17,7 @@
  *  POST /api/timer/stop      "Stop" from a notification: { deviceId, deviceSecret } (no sign-in token needed)
  *  POST /api/hooks/session   called by the database (pg_net) when a timer starts/stops -> push to devices
  *  cron (daily)             keep-alive + JSON backup of all tables to B2
- *  cron (every 15 min)      "still working on X?" reminders for long-running timers
+ *  cron (every 15 min)      "still working on X?" reminders, every N minutes (Settings) while a timer runs
  *
  * Backblaze is a SHARED account: every key this Worker signs or writes starts with `sand-gallery/`.
  */
@@ -354,10 +354,10 @@ function sameString(a: string, b: string): boolean {
   return x === 0
 }
 
-async function userSettings(env: Env, ownerId: string): Promise<{ notify_enabled: boolean; reminder_hours: number }> {
-  const res = await service(env, `settings?owner_id=eq.${ownerId}&select=notify_enabled,reminder_hours`)
-  const rows = res.ok ? ((await res.json()) as { notify_enabled: boolean; reminder_hours: number }[]) : []
-  return rows[0] ?? { notify_enabled: true, reminder_hours: 2 }
+async function userSettings(env: Env, ownerId: string): Promise<{ notify_enabled: boolean; reminder_hours: number; reminder_minutes?: number | null }> {
+  const res = await service(env, `settings?owner_id=eq.${ownerId}&select=notify_enabled,reminder_hours,reminder_minutes`)
+  const rows = res.ok ? ((await res.json()) as { notify_enabled: boolean; reminder_hours: number; reminder_minutes?: number | null }[]) : []
+  return rows[0] ?? { notify_enabled: true, reminder_hours: 2, reminder_minutes: 120 }
 }
 
 /** Pushes to every device of a user; drops subscriptions the push service says are gone. */
@@ -456,8 +456,10 @@ export async function reminders(env: Env) {
   let sent = 0
   for (const s of open) {
     const st = await userSettings(env, s.owner_id)
-    if (!st.notify_enabled || !st.reminder_hours) continue
-    const every = st.reminder_hours * 3600_000
+    // any interval in minutes (from 15); older rows only have whole hours
+    const minutes = st.reminder_minutes ?? st.reminder_hours * 60
+    if (!st.notify_enabled || !minutes) continue
+    const every = minutes * 60_000
     const started = Date.parse(s.started_at)
     const last = s.reminded_at ? Date.parse(s.reminded_at) : started
     if (now - started < every || now - last < every - 60_000) continue
