@@ -10,6 +10,9 @@ export interface CustomColors {
   hg_light?: number | null; sand_light?: number | null; bg_light?: number | null; freeze_light?: number | null
 }
 
+/** Luminance of the theme backgrounds from index.css (#f7f1e8 / #14110d). */
+const THEME_BG_LUM = { light: 0.887, dark: 0.0059 } as const
+
 /** Default hues, used when only the brightness is changed. */
 export const DEFAULT_HUES = { hg: 29, sand: 32, bg: 36, freeze: 200 } as const
 
@@ -17,7 +20,7 @@ const KEY = 'sg.colors'
 const VARS = [
   '--sg-bg', '--sg-surface', '--sg-surface-2', '--sg-line', '--sg-ink', '--sg-muted', '--sg-accent-strong', '--sg-accent-soft', 'color-scheme',
   '--glass-line', '--rim', '--hg2-wall', '--glass-fill',
-  '--sand-1', '--sand-2', '--sand-3', '--hg2-sand', '--freeze',
+  '--sand-1', '--sand-2', '--sand-3', '--hg2-sand', '--freeze', '--hg-halo',
 ]
 let current: CustomColors = read()
 
@@ -127,15 +130,21 @@ export function colorVars(c: CustomColors, dark: boolean): Record<string, string
       v['color-scheme'] = onDark ? 'dark' : 'light'
     }
   }
-  // the hourglass outline always stands out from the background (>= 3:1, like any graphic)
+  // the hourglass outline is exactly the chosen colour/brightness; if it would get lost against the background
+  // (< 3:1, the bar for graphics), a thin halo in the opposite tone keeps its shape visible
   if (active(c.hg_hue, c.hg_light) || bgLum >= 0) {
     const h = c.hg_hue ?? DEFAULT_HUES.hg
     const base = onDark ? 72 : 27, wallBase = onDark ? 70 : 22
     const ls = onDark ? 32 : 38, ws = onDark ? 18 : 22
-    let line = lightness(base, c.hg_light), wall = lightness(wallBase, c.hg_light)
-    if (bgLum >= 0) { line = separate(h, ls, line, bgLum, 3.1); wall = separate(h, ws, wall, bgLum, 3.1) }
+    const line = lightness(base, c.hg_light), wall = lightness(wallBase, c.hg_light)
     const lc = hsl(h, ls, line)
     Object.assign(v, { '--glass-line': lc, '--rim': lc, '--hg2-wall': hsl(h, ws, wall) })
+    const back = bgLum >= 0 ? bgLum : dark ? THEME_BG_LUM.dark : THEME_BG_LUM.light
+    if (Math.min(contrast(lumOf(h, ls, line), back), contrast(lumOf(h, ws, wall), back)) < 3) {
+      // halo colour: whichever of near-white / near-black stands out more against the background
+      const halo = contrast(1, back) >= contrast(0, back) ? 'rgb(255 255 255 / 0.9)' : 'rgb(0 0 0 / 0.85)'
+      v['--hg-halo'] = `drop-shadow(0 0 0.6px ${halo}) drop-shadow(0 0 1.4px ${halo})`
+    }
   }
   if (active(c.sand_hue, c.sand_light) || glassL >= 0) {
     const h = c.sand_hue ?? DEFAULT_HUES.sand

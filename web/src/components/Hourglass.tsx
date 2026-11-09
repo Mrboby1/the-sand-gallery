@@ -106,6 +106,7 @@ function Hourglass2D({ running, size, className, title, detail }: { running: boo
   const sw = full ? 3.6 : 6
   return (
     <svg
+      data-outline=""
       viewBox={`0 ${top} 120 ${height}`}
       width={size}
       height={(size * height) / 120}
@@ -183,6 +184,7 @@ function HourglassClassic({ running, size, className, title, detail }: { running
 
   return (
     <svg
+      data-outline=""
       viewBox={`0 ${top} 120 ${height}`}
       width={size}
       height={(size * height) / 120}

@@ -104,7 +104,8 @@ Settings > Appearance > Colours: a hue slider per colour and, behind a sun butto
 slider (`*_light`, -50..50 = black..white, migration 0014) for the hourglass, the sand, the background and the
 freeze colour. The background decides light or dark text/cards whatever the theme: `colorVars` flips them, nudges
 mid tones just past the band where neither works, and keeps body, muted and accent text >= 4.5:1 against the
-background, both surfaces and the accent tint; the hourglass outline stays >= 3:1 and the sand visible in the glass
+background, both surfaces and the accent tint; the hourglass outline keeps exactly the chosen brightness and gets a thin contrasting halo (`--hg-halo`, a drop-shadow)
+when it is under 3:1 against the background, and the sand stays visible in the glass
 (checked for 22,032 hue x brightness x theme combinations). Colours:
 saved per user in `settings` (`hg_hue`, `sand_hue`, `bg_hue`, `freeze_hue`; null = original colours) so they sync across devices.
 `src/lib/customColors.ts` turns a hue into CSS variables for the current theme with fixed lightness/saturation, so

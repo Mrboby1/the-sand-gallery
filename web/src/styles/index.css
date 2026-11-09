@@ -123,7 +123,10 @@ body {
 [data-theme="dark"] { --freeze: hsl(200 70% 68%); }
 .hg { --hg-line-eff: var(--glass-line); --hg-rim-eff: var(--rim); --hg2-wall-eff: var(--hg2-wall); --hg-sand-eff: var(--sand-2); --hg2-sand-eff: var(--hg2-sand); }
 .hg.paused { --hg-line-eff: color-mix(in srgb, var(--glass-line) 72%, var(--freeze)); --hg-rim-eff: color-mix(in srgb, var(--rim) 72%, var(--freeze)); --hg2-wall-eff: color-mix(in srgb, var(--hg2-wall) 72%, var(--freeze)); --hg-sand-eff: color-mix(in srgb, var(--sand-2) 70%, var(--freeze)); --hg2-sand-eff: color-mix(in srgb, var(--hg2-sand) 70%, var(--freeze)); }
-.hg.frozen { --hg-line-eff: color-mix(in srgb, var(--glass-line) 40%, var(--freeze)); --hg-rim-eff: color-mix(in srgb, var(--rim) 40%, var(--freeze)); --hg2-wall-eff: color-mix(in srgb, var(--hg2-wall) 40%, var(--freeze)); }
+/* frozen: a light icy tint on the outline, so its own brightness still shows */
+.hg.frozen { --hg-line-eff: color-mix(in srgb, var(--glass-line) 68%, var(--freeze)); --hg-rim-eff: color-mix(in srgb, var(--rim) 68%, var(--freeze)); --hg2-wall-eff: color-mix(in srgb, var(--hg2-wall) 68%, var(--freeze)); }
+/* outline halo when the hourglass colour is close to the background (set by customColors) */
+.hg-outline, svg[data-outline] { filter: var(--hg-halo, none); }
 .hg path, .hg ellipse, .hg circle, .hg rect { transition: stroke .8s ease, fill .8s ease; }
 /* colour sliders: everything follows at once (see applyColors) */
 [data-live] *, [data-live] *::before, [data-live] *::after { transition-property: opacity, transform !important; }

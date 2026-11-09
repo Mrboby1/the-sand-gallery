@@ -146,7 +146,7 @@ export function HourglassSim({ style, running, size, className = '', title, fill
       {/* frost (only visible when paused): an icy tint over glass and sand, frosted edges, a few crystals */}
       <Frost uid={uid} interior={kind === 'classic' ? CLASSIC_INTERIOR : LINE_INTERIOR} kind={kind} size={size} h={h} />
       {/* in front: outline, rims, shine */}
-      <svg viewBox={`0 ${TOP} 120 ${HEIGHT}`} width={size} height={h} className="absolute inset-0" aria-hidden overflow="visible">
+      <svg viewBox={`0 ${TOP} 120 ${HEIGHT}`} width={size} height={h} className="hg-outline absolute inset-0" aria-hidden overflow="visible">
         {outline ? (
           <>
             <path d={outline} fill="none" stroke="var(--hg-line-eff)" strokeWidth="2.2" strokeLinecap="round" />
