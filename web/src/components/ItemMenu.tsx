@@ -11,12 +11,13 @@ import {
 } from '../store/app'
 import { useRunning } from '../lib/hooks'
 import { MoveSheet, ShareSheet, TagEditor, saveTemplateFlow } from './ItemBits'
+import { FolderDeleteSheet } from './Folder'
 import { StatusBar } from './StatusPill'
 import { Thumb } from './Tile'
 import { Button, Input, Sheet, confirmDialog, cx, promptDialog } from './ui'
 import { t } from '../i18n'
 
-type Sub = 'status' | 'tags' | 'due' | 'cover' | 'move' | 'share'
+type Sub = 'status' | 'tags' | 'due' | 'cover' | 'move' | 'share' | 'folderDelete'
 interface MenuState { id: string | null; pos: { x: number; y: number } | null; sub: Sub | null }
 const useMenu = create<MenuState>(() => ({ id: null, pos: null, sub: null }))
 
@@ -122,7 +123,15 @@ export function ItemMenuHost() {
   const media = allMedia.filter((m) => m.item_id === item.id)
   const isRunning = running?.item_id === item.id
   const openSub = (s: Sub) => useMenu.setState({ sub: s, pos: null })
-  const actions: Action[] = [
+  const renameAction: Action = { key: 'rename', icon: <Pencil size={17} />, label: t('item.rename'), run: async () => { closeMenu(); const v = await promptDialog(t('item.rename'), item.title); if (v) void updateItem(item.id, { title: v }) } }
+  const folderActions: Action[] = [
+    renameAction,
+    { key: 'cover', icon: <ImageIcon size={17} />, label: t('menu.cover'), run: () => openSub('cover'), disabled: !media.length },
+    { key: 'move', icon: <FolderInput size={17} />, label: t('item.move'), run: () => openSub('move') },
+    { key: 'share', icon: <Link2 size={17} />, label: t('item.share'), run: () => openSub('share') },
+    { key: 'delete', icon: <Trash2 size={17} />, label: t('folder.delete'), danger: true, run: () => openSub('folderDelete') },
+  ]
+  const itemActions: Action[] = [
     { key: 'rename', icon: <Pencil size={17} />, label: t('item.rename'), run: async () => { closeMenu(); const v = await promptDialog(t('item.rename'), item.title); if (v) void updateItem(item.id, { title: v }) } },
     { key: 'status', icon: <CircleDot size={17} />, label: t('menu.status'), run: () => openSub('status') },
     { key: 'tags', icon: <Tag size={17} />, label: t('menu.tags'), run: () => openSub('tags') },
@@ -144,7 +153,10 @@ export function ItemMenuHost() {
     },
   ]
 
+  const actions = item.kind === 'folder' ? folderActions : itemActions
+
   // ---- sub-sheets
+  if (sub === 'folderDelete') return <FolderDeleteSheet item={item} onClose={closeMenu} onDeleted={() => { if (loc.pathname === `/i/${item.id}`) nav(item.parent_id ? `/i/${item.parent_id}` : '/', { replace: true }) }} />
   if (sub === 'move') return <MoveSheet item={item} onClose={closeMenu} />
   if (sub === 'share') return <ShareSheet item={item} onClose={closeMenu} />
   if (sub === 'status') {
@@ -215,11 +227,11 @@ function Popover({ pos, onClose, children }: { pos: { x: number; y: number }; on
     }
     const out = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) onClose() }
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    setTimeout(() => document.addEventListener('mousedown', out), 0)
+    const armOut = setTimeout(() => document.addEventListener('mousedown', out), 0)
     window.addEventListener('keydown', esc)
     // ignore the scroll that can land right after opening (e.g. the page settling)
     const armScroll = setTimeout(() => window.addEventListener('scroll', onClose, true), 300)
-    return () => { clearTimeout(armScroll); document.removeEventListener('mousedown', out); window.removeEventListener('keydown', esc); window.removeEventListener('scroll', onClose, true) }
+    return () => { clearTimeout(armOut); clearTimeout(armScroll); document.removeEventListener('mousedown', out); window.removeEventListener('keydown', esc); window.removeEventListener('scroll', onClose, true) }
   }, [pos, onClose])
   return createPortal(
     <div ref={ref} style={{ left: xy.x, top: xy.y }} className="rise fixed z-[96] w-60 rounded-2xl border border-line bg-surface p-1.5 shadow-lift">

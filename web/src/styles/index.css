@@ -130,6 +130,17 @@ body {
 .frozen-text { color: color-mix(in srgb, var(--sg-ink) 55%, var(--freeze)); }
 .frozen-card { background: color-mix(in srgb, var(--sg-surface) 86%, var(--freeze)); border-color: color-mix(in srgb, var(--sg-line) 60%, var(--freeze)); }
 
+/* ---------- Folders: a manila-style folder in the accent colour (outlined in the 2D style) */
+.folder-back { background: color-mix(in srgb, var(--sg-accent) 34%, var(--sg-surface)); }
+.folder-front {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--sg-accent) 26%, var(--sg-surface)) 0%, color-mix(in srgb, var(--sg-accent) 44%, var(--sg-surface)) 100%);
+  box-shadow: 0 -3px 10px rgb(0 0 0 / 0.07), inset 0 1px 0 rgb(255 255 255 / 0.35);
+}
+[data-theme="dark"] .folder-back { background: color-mix(in srgb, var(--sg-accent) 30%, var(--sg-surface)); }
+[data-theme="dark"] .folder-front { background: linear-gradient(180deg, color-mix(in srgb, var(--sg-accent) 34%, var(--sg-surface)) 0%, color-mix(in srgb, var(--sg-accent) 22%, var(--sg-surface)) 100%); }
+[data-style="line"] .folder-back, [data-style="line"] .folder-front { background: var(--sg-surface); box-shadow: none; border: 2px solid color-mix(in srgb, var(--sg-ink) 55%, transparent); }
+[data-style="line"] .folder .folder-front { border-color: color-mix(in srgb, var(--sg-ink) 70%, transparent); }
+
 .gloss-only { display: none; }
 [data-style="glossy"] .gloss-only { display: revert; }
 [data-style="glossy"] .flat-only { display: none; }

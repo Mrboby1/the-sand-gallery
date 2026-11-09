@@ -117,6 +117,17 @@ A paused hourglass blends its outline, rims and sand toward `--freeze` (`freeze_
 transitions, the canvas grains blend over ~0.8 s, and a static frost layer (tint, frosted edges, crystals) fades in.
 The timer card and time text take an icy tint too. Small CSS glyphs get a lighter tint. Nothing animates while frozen.
 
+### Folders
+An item with `kind = 'folder'` (migration 0013; existing rows are 'item') groups projects and other folders. Folders sit at
+the top level or inside folders, never inside a project (enforced by `items_check_parent`, the Move sheet and
+`createFolder`/`moveItem`). They look like a folder everywhere (`components/Folder.tsx`: tab, back, up to three
+covers of what is inside peeking out, front flap; outlined in the 2D style), come first in lists, are skipped on the
+board, and open as a gallery (`FolderPage`): their projects and folders as tiles, a Notes tab and their own photos;
+no status, timer, time log, costs, tags or due date (only a read-only total). + offers New folder at the top level
+and inside folders; New project inside a folder creates it there. Long-press on a folder: Rename, Set cover, Move to…,
+Share link, Delete (move the contents out to the parent, or delete everything). Share pages show folders as folders
+(`shared_gallery` returns `kind`); export/import and backups carry the column.
+
 ### Offline version
 "Use the offline version" on the sign-in page (or Settings > Your data) runs the app on the `LocalBackend`
 (localStorage + IndexedDB, no account, nothing uploaded). The choice is per device (`localStorage sg.backend=local`,
@@ -140,8 +151,8 @@ Migration 0011: `public.allowed_emails` (owner = `is_admin`), `access_check()` f
 `scripts/auth-hook.ps1 -Action enable`) that refuses new accounts for addresses not on the list. The Worker checks
 `is_allowed` before media/upload/backup/push calls (cached 5 min; a recent yes in KV keeps photos working while the DB
 sleeps). Not-listed accounts get "This gallery is private" with a button to the offline version. The owner adds and
-removes people in Settings > Allowed people. Google OAuth is in testing mode: new people must also be added as test
-users in Google Cloud (or the consent screen published).
+removes people in Settings > Allowed people. Google sign-in is published (In production since 2026-11-08, with
+/privacy and /terms pages), so adding an e-mail to the list is all a new person needs.
 
 ### Wake-up
 Free Supabase projects pause after 7 idle days (the daily cron should prevent it). If the app cannot reach the DB it

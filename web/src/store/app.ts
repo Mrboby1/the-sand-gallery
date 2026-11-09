@@ -388,7 +388,7 @@ function newItem(parentId: string | null, title: string, sort: number, extra: Pa
   const ts = now()
   return {
     id: uuid(), parent_id: parentId, title, notes: '', status_id: null, tags: [], due_date: null,
-    cover_media_id: null, sort_order: sort, created_at: ts, updated_at: ts, ...extra,
+    cover_media_id: null, sort_order: sort, created_at: ts, updated_at: ts, kind: 'item', ...extra,
   }
 }
 
@@ -418,6 +418,15 @@ export async function createItem(parentId: string | null, title: string, templat
   return root.id
 }
 
+/** A folder: at the top level or inside another folder (never inside a project). */
+export async function createFolder(parentId: string | null, title: string): Promise<string> {
+  const d = get().data
+  if (parentId && d.items.find((i) => i.id === parentId)?.kind !== 'folder') parentId = null
+  const f = newItem(parentId, title.trim() || t('folder.untitled'), nextSort(d.items, parentId), { kind: 'folder' })
+  await commit((s) => ({ ...s, items: [...s.items, f] }), [{ k: 'insert', table: 'items', rows: [f] }])
+  return f.id
+}
+
 export function updateItem(id: string, patch: Partial<Item>) {
   // finished_at is kept by the database; mirror it locally so the gallery view switches at once
   const fin = (sid: string | null | undefined) => !!get().data.statuses.find((x) => x.id === sid)?.is_finished
@@ -435,6 +444,8 @@ export function updateItem(id: string, patch: Partial<Item>) {
 export function moveItem(id: string, newParent: string | null) {
   const d = get().data
   if (newParent && (newParent === id || descendantIds(d.items, id).has(newParent))) return
+  // a folder can only go to the top level or into another folder
+  if (newParent && d.items.find((i) => i.id === id)?.kind === 'folder' && d.items.find((i) => i.id === newParent)?.kind !== 'folder') return
   return updateItem(id, { parent_id: newParent, sort_order: nextSort(d.items, newParent) })
 }
 
@@ -495,7 +506,7 @@ export async function duplicateItem(id: string): Promise<string | null> {
   if (!src) return null
   const rows: Item[] = []
   const copy = (it: Item, parent: string | null, sort: number, suffix: string) => {
-    const c = newItem(parent, it.title + suffix, sort, { tags: [...it.tags], status_id: it.status_id, notes: it.notes, due_date: it.due_date })
+    const c = newItem(parent, it.title + suffix, sort, { tags: [...it.tags], status_id: it.status_id, notes: it.notes, due_date: it.due_date, kind: it.kind ?? 'item' })
     rows.push(c)
     childrenOf(d.items, it.id).forEach((k, i) => copy(k, c.id, i + 1, ''))
   }

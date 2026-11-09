@@ -10,6 +10,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
     { id: 'create', keywords: 'new project add plus button create' },
     { id: 'subtasks', keywords: 'subtask nested inside child' },
     { id: 'templates', keywords: 'template save as template new from template' },
+    { id: 'folders', keywords: 'folder folders group organise organize gallery new folder move' },
     { id: 'longpress', keywords: 'long press menu right click rename move duplicate delete undo actions' },
     { id: 'status', keywords: 'status pill bar idea progress done sold board' },
     { id: 'finished', keywords: 'finished done sold gallery mode album manage' },

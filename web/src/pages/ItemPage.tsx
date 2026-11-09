@@ -8,6 +8,7 @@ import {
 } from '../store/app'
 import { useIsFinished, useLocalPref, useTotals } from '../lib/hooks'
 import { FinishedView } from '../components/FinishedView'
+import { FolderPage } from '../components/Folder'
 import { setClientView, useClientView } from '../lib/clientView'
 import { Eye, EyeOff } from 'lucide-react'
 import { AddMenu } from '../components/AddMenu'
@@ -123,6 +124,8 @@ export function ItemPage() {
       )}
     </Menu>
   )
+
+  if (item.kind === 'folder') return <FolderPage item={item} crumbs={crumbsNav} />
 
   const backTo = item.parent_id ? `/i/${item.parent_id}` : '/'
   const finished = isFinished(item.id)

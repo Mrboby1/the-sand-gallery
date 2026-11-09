@@ -237,7 +237,7 @@ export class LocalBackend implements Backend {
     const urls = await this.mediaUrls(media.flatMap((m) => [m.object_key, m.thumb_key].filter(Boolean) as string[]))
     return {
       root_id: link.item_id,
-      items: db.items.filter((i) => ids.has(i.id)).map(({ id, parent_id, title, status_id, cover_media_id, sort_order }) => ({ id, parent_id, title, status_id, cover_media_id, sort_order })),
+      items: db.items.filter((i) => ids.has(i.id)).map(({ id, parent_id, title, status_id, cover_media_id, sort_order, kind }) => ({ id, parent_id, title, status_id, cover_media_id, sort_order, kind: kind ?? "item" as const })),
       statuses: db.statuses.map(({ id, name, color }) => ({ id, name, color })),
       media: media.map((m) => ({ id: m.id, item_id: m.item_id, kind: m.kind, width: m.width, height: m.height, phase: m.phase, created_at: m.created_at, note: m.note ?? null, url: urls[m.object_key], thumb_url: m.thumb_key ? urls[m.thumb_key] : null })),
     }

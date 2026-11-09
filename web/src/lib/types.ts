@@ -30,6 +30,8 @@ export interface Item {
   updated_at: ISODate
   /** Set (by the database) when the item gets a finished status. */
   finished_at?: ISODate | null
+  /** 'folder' groups projects and folders (no status/timer/costs); missing or 'item' = project/subtask. */
+  kind?: 'item' | 'folder'
 }
 
 /** One note of an item (an item can have many; newest first, pinned ones on top). */
@@ -168,7 +170,7 @@ export interface AppUser {
 /** Public, read-only gallery returned for a share link. */
 export interface SharedGallery {
   root_id: UUID
-  items: Pick<Item, 'id' | 'parent_id' | 'title' | 'status_id' | 'cover_media_id' | 'sort_order'>[]
+  items: Pick<Item, 'id' | 'parent_id' | 'title' | 'status_id' | 'cover_media_id' | 'sort_order' | 'kind'>[]
   statuses: Pick<Status, 'id' | 'name' | 'color'>[]
   media: (Pick<Media, 'id' | 'item_id' | 'kind' | 'width' | 'height' | 'phase' | 'created_at' | 'note'> & { url: string; thumb_url: string | null })[]
 }

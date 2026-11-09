@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Layers, Play, X } from 'lucide-react'
 import { backend } from '../lib/backend'
 import type { SharedGallery } from '../lib/types'
 import { Hourglass } from '../components/Hourglass'
+import { FolderShape } from '../components/Folder'
 import { StatusPill } from '../components/StatusPill'
 import { Empty, cx } from '../components/ui'
 import { t } from '../i18n'
@@ -26,7 +27,7 @@ export function SharePage() {
     const cur = at ?? data.root_id
     const byId = new Map(data.items.map((i) => [i.id, i]))
     const item = byId.get(cur)
-    const kids = data.items.filter((i) => i.parent_id === cur).sort((a, b) => a.sort_order - b.sort_order)
+    const kids = data.items.filter((i) => i.parent_id === cur).sort((a, b) => Number(b.kind === 'folder') - Number(a.kind === 'folder') || a.sort_order - b.sort_order)
     const media = data.media.filter((m) => m.item_id === cur).sort((a, b) => a.created_at.localeCompare(b.created_at))
     const crumbs: { id: string; title: string }[] = []
     let p = item
@@ -39,7 +40,8 @@ export function SharePage() {
       for (const k of data.items.filter((i) => i.parent_id === id)) { const kc = coverOf(k.id); if (kc) return kc }
       return undefined
     }
-    return { item, kids, media, crumbs, coverOf, status: (sid: string | null) => data.statuses.find((s) => s.id === sid) }
+    const folderThumbs = (id: string) => data.items.filter((i) => i.parent_id === id).map((i) => coverOf(i.id)).filter(Boolean).slice(0, 3).map((c) => c!.thumb_url ?? c!.url)
+    return { item, kids, media, crumbs, coverOf, folderThumbs, status: (sid: string | null) => data.statuses.find((s) => s.id === sid) }
   }, [data, at])
 
   if (data === undefined) return <div className="flex min-h-full items-center justify-center"><Hourglass running size={70} /></div>
@@ -69,6 +71,12 @@ export function SharePage() {
             {view.kids.map((k) => {
               const c = view.coverOf(k.id)
               return (
+                k.kind === 'folder' ? (
+                  <button key={k.id} onClick={() => { setAt(k.id); window.scrollTo({ top: 0 }) }} className="rise group block text-left">
+                    <FolderShape thumbs={view.kids.length ? view.folderThumbs(k.id).map((u, i) => <img key={i} src={u} alt="" loading="lazy" className="h-full w-full object-cover" />) : []} />
+                    <div dir="auto" className="px-0.5 pt-2.5 font-display text-[16px] font-semibold [overflow-wrap:anywhere]">{k.title}</div>
+                  </button>
+                ) : (
                 <button key={k.id} onClick={() => { setAt(k.id); window.scrollTo({ top: 0 }) }} className="rise group block text-left">
                   <div className="relative aspect-square overflow-hidden rounded-2xl bg-surface-2">
                     {c ? <img src={c.thumb_url ?? c.url} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition group-hover:opacity-90" /> : <div className="absolute inset-0 flex items-center justify-center text-muted/60"><Layers size={34} strokeWidth={1.5} /></div>}
@@ -78,6 +86,7 @@ export function SharePage() {
                     <StatusPill status={view.status(k.status_id) as never} size="xs" className="mt-0.5 shrink-0" />
                   </div>
                 </button>
+                )
               )
             })}
           </div>

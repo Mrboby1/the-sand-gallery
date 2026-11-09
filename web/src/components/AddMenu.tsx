@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ImagePlus, ListPlus, MoreHorizontal, Plus, SquarePlus, StickyNote } from 'lucide-react'
+import { FolderPlus, ImagePlus, ListPlus, MoreHorizontal, Plus, SquarePlus, StickyNote } from 'lucide-react'
 import { useApp, addNote, createItem, toast, uploadFiles } from '../store/app'
 import { NewItemSheet } from './ItemBits'
 import { Button, Sheet, cx } from './ui'
@@ -15,8 +15,8 @@ function countNodes(n: { children?: unknown[] }[]): number {
  * At the top level it offers a new project, inside an item a new subtask; plus new from template and
  * (inside an item) upload photos/videos.
  */
-export function AddMenu({ parentId, parentTitle, aboveBar = false, variant = 'both' }: { parentId: string | null; parentTitle?: string; aboveBar?: boolean; variant?: 'both' | 'fab' | 'button' }) {
-  const [sheet, setSheet] = useState<null | 'menu' | 'item' | 'template'>(null)
+export function AddMenu({ parentId, parentTitle, parentKind = parentId ? 'item' : undefined, aboveBar = false, variant = 'both' }: { parentId: string | null; parentTitle?: string; parentKind?: 'item' | 'folder'; aboveBar?: boolean; variant?: 'both' | 'fab' | 'button' }) {
+  const [sheet, setSheet] = useState<null | 'menu' | 'item' | 'folder' | 'template'>(null)
   const nav = useNavigate()
   const file = useRef<HTMLInputElement>(null)
   return (
@@ -47,6 +47,8 @@ export function AddMenu({ parentId, parentTitle, aboveBar = false, variant = 'bo
         onClose={() => setSheet(null)}
         canUpload={!!parentId}
         parentTitle={parentTitle}
+        inFolder={parentKind === 'folder'}
+        canFolder={!parentId || parentKind === 'folder'}
         onPick={(what) => {
           if (what === 'upload') { setSheet(null); file.current?.click() }
           else if (what === 'note' && parentId) { setSheet(null); const id = addNote(parentId); nav(`/i/${parentId}?tab=notes&note=${id}`) }
@@ -54,13 +56,14 @@ export function AddMenu({ parentId, parentTitle, aboveBar = false, variant = 'bo
         }}
       />
       <NewItemSheet open={sheet === 'item'} onClose={() => setSheet(null)} parentId={parentId} stay={!!parentId} />
+      <NewItemSheet open={sheet === 'folder'} onClose={() => setSheet(null)} parentId={parentId} kind="folder" stay={!!parentId} />
       {sheet === 'template' && <TemplatePickerSheet parentId={parentId} onClose={() => setSheet(null)} />}
     </>
   )
 }
 
-function AddSheet({ open, onClose, onPick, canUpload, parentTitle }: {
-  open: boolean; onClose: () => void; onPick: (w: 'item' | 'template' | 'upload' | 'note') => void; canUpload: boolean; parentTitle?: string
+function AddSheet({ open, onClose, onPick, canUpload, parentTitle, inFolder, canFolder }: {
+  open: boolean; onClose: () => void; onPick: (w: 'item' | 'folder' | 'template' | 'upload' | 'note') => void; canUpload: boolean; parentTitle?: string; inFolder: boolean; canFolder: boolean
 }) {
   const templates = useApp((s) => s.data.templates)
   /** One row; `more` adds a "⋯" button on the right (e.g. "from a template"). */
@@ -85,9 +88,10 @@ function AddSheet({ open, onClose, onPick, canUpload, parentTitle }: {
   return (
     <Sheet open={open} onClose={onClose} title={t('add.title')}>
       <div className="flex flex-col gap-1">
-        {canUpload
+        {canUpload && !inFolder
           ? <Opt icon={<ListPlus size={21} />} title={t('add.subtask')} hint={t('add.subtaskHint', { title: parentTitle ?? '' })} onClick={() => onPick('item')} more={fromTemplate} />
-          : <Opt icon={<SquarePlus size={21} />} title={t('add.project')} hint={t('add.projectHint')} onClick={() => onPick('item')} more={fromTemplate} />}
+          : <Opt icon={<SquarePlus size={21} />} title={t('add.project')} hint={inFolder ? t('add.projectInFolder', { title: parentTitle ?? '' }) : t('add.projectHint')} onClick={() => onPick('item')} more={fromTemplate} />}
+        {canFolder && <Opt icon={<FolderPlus size={21} />} title={t('add.folder')} hint={inFolder ? t('add.folderInFolder', { title: parentTitle ?? '' }) : t('add.folderHint')} onClick={() => onPick('folder')} />}
         {canUpload && <Opt icon={<StickyNote size={21} />} title={t('add.note')} hint={t('add.noteHint', { title: parentTitle ?? '' })} onClick={() => onPick('note')} />}
         {canUpload && <Opt icon={<ImagePlus size={21} />} title={t('add.upload')} hint={t('add.uploadHint', { title: parentTitle ?? '' })} onClick={() => onPick('upload')} />}
       </div>

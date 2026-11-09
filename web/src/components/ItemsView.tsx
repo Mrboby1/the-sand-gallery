@@ -17,8 +17,10 @@ import type { ViewMode } from './ViewSwitcher'
 import { cx, IconButton } from './ui'
 import { t } from '../i18n'
 import { locale } from '../i18n'
+import { FolderRow, FolderTile, isFolder } from './Folder'
 
-export function ItemsView({ items, view, scopeIds, pathOf, rootId }: { items: Item[]; view: ViewMode; scopeIds?: Set<string>; pathOf?: (it: Item) => string; rootId?: string }) {
+export function ItemsView({ items: given, view, scopeIds, pathOf, rootId }: { items: Item[]; view: ViewMode; scopeIds?: Set<string>; pathOf?: (it: Item) => string; rootId?: string }) {
+  const items = useMemo(() => (given.some(isFolder) ? [...given.filter(isFolder), ...given.filter((i) => !isFolder(i))] : given), [given])
   const statuses = useApp((s) => s.data.statuses)
   const showDue = useApp((s) => s.data.settings.due_dates_enabled)
   const covers = useCoverFor()
@@ -26,7 +28,7 @@ export function ItemsView({ items, view, scopeIds, pathOf, rootId }: { items: It
   const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses])
   const isFinished = useIsFinished()
 
-  if (view === 'board') return <Board items={items} statuses={statuses} />
+  if (view === 'board') return <Board items={items.filter((i) => !isFolder(i))} statuses={statuses} />
   if (view === 'calendar') return <CalendarView items={items} scopeIds={scopeIds} rootId={rootId} />
 
   if (view === 'list') {
@@ -34,11 +36,11 @@ export function ItemsView({ items, view, scopeIds, pathOf, rootId }: { items: It
       <div className="flex flex-col gap-0.5">
         {items.map((it) => (
           <ItemPress key={it.id} itemId={it.id} dots="row">
-          <ItemRow
+          {isFolder(it) ? <FolderRow item={it} path={pathOf?.(it)} /> : <ItemRow
             item={it} status={it.status_id ? statusById.get(it.status_id) : null} cover={covers.cover(it)}
             total={totals.total(it.id)} ticking={totals.runningChain.has(it.id)} kids={covers.countKids(it.id)} showDue={showDue}
             path={pathOf?.(it)}
-          />
+          />}
           </ItemPress>
         ))}
       </div>
@@ -55,7 +57,9 @@ export function ItemsView({ items, view, scopeIds, pathOf, rootId }: { items: It
         size === 'l' && 'grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 sm:gap-x-5',
       )}
     >
-      {items.map((it) => <ItemPress key={it.id} itemId={it.id}>{isFinished(it.id) ? (
+      {items.map((it) => <ItemPress key={it.id} itemId={it.id}>{isFolder(it) ? (
+        <FolderTile item={it} size={size} />
+      ) : isFinished(it.id) ? (
         <AlbumTile item={it} size={size} cover={covers.cover(it)} count={covers.countMedia(it.id)} />
       ) : (
         <ItemTile

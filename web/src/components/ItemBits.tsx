@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, ChevronRight, Copy, CornerDownRight, FilePlus2, Hash, Layers, Link2, Plus, X } from 'lucide-react'
+import { Check, ChevronRight, Copy, CornerDownRight, FilePlus2, Folder as FolderIcon, Hash, Layers, Link2, Plus, X } from 'lucide-react'
 import type { Item } from '../lib/types'
 import {
-  useApp, childrenOf, createItem, createShare, descendantIds, moveItem, revokeShare, shareUrl, toast, updateItem, findTemplateByName, saveAsTemplate,
+  useApp, childrenOf, createFolder, createItem, createShare, descendantIds, moveItem, revokeShare, shareUrl, toast, updateItem, findTemplateByName, saveAsTemplate,
 } from '../store/app'
 import { Button, Input, Sheet, confirmDialog, cx, promptDialog } from './ui'
 import { t } from '../i18n'
@@ -78,22 +78,24 @@ export function TagEditor({ item }: { item: Item }) {
 
 // ---------------------------------------------------------------- new item
 /** New item dialog. `stay`: keep the current page (adding several subtasks) and offer Open in a toast. */
-export function NewItemSheet({ open, onClose, parentId, stay }: { open: boolean; onClose: () => void; parentId: string | null; stay?: boolean }) {
-  const templates = useApp((s) => s.data.templates)
+export function NewItemSheet({ open, onClose, parentId, stay, kind = 'item' }: { open: boolean; onClose: () => void; parentId: string | null; stay?: boolean; kind?: 'item' | 'folder' }) {
+  const all = useApp((s) => s.data.templates)
+  const templates = kind === 'folder' ? [] : all
+  const parentIsFolder = useApp((s) => !!parentId && s.data.items.find((i) => i.id === parentId)?.kind === 'folder')
   const [title, setTitle] = useState('')
   const [tpl, setTpl] = useState<string | null>(null)
   const nav = useNavigate()
   const submit = async () => {
-    const id = await createItem(parentId, title.trim(), tpl ?? undefined)
+    const id = kind === 'folder' ? await createFolder(parentId, title.trim()) : await createItem(parentId, title.trim(), tpl ?? undefined)
     const made = useApp.getState().data.items.find((i) => i.id === id)
     setTitle(''); setTpl(null); onClose()
     if (stay) toast(t('item.created', { title: made?.title ?? '' }), 'info', { label: t('share.open'), run: () => nav(`/i/${id}`) })
     else nav(`/i/${id}`)
   }
   return (
-    <Sheet open={open} onClose={onClose} title={parentId ? t('item.newSub') : t('item.new')}>
+    <Sheet open={open} onClose={onClose} title={kind === 'folder' ? t('add.folder') : parentId && !parentIsFolder ? t('item.newSub') : t('item.new')}>
       <form onSubmit={(e) => { e.preventDefault(); void submit() }} className="flex flex-col gap-4">
-        <Input autoFocus dir="auto" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tpl ? templates.find((x) => x.id === tpl)?.item_title : t('item.titlePlaceholder')} className="h-12 text-lg" />
+        <Input autoFocus dir="auto" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tpl ? templates.find((x) => x.id === tpl)?.item_title : kind === 'folder' ? t('folder.namePlaceholder') : t('item.titlePlaceholder')} className="h-12 text-lg" />
         {templates.length > 0 && (
           <div>
             <div className="mb-2 text-[13px] font-medium text-muted">{t('item.fromTemplate')}</div>
@@ -130,8 +132,10 @@ function TplChip({ active, onClick, icon, children }: { active: boolean; onClick
 export function MoveSheet({ item, onClose }: { item: Item; onClose: () => void }) {
   const items = useApp((s) => s.data.items)
   const banned = useMemo(() => new Set([item.id, ...descendantIds(items, item.id)]), [items, item.id])
+  // a folder can only go into another folder; a project can go into a folder or a project
+  const onlyFolders = item.kind === 'folder'
   const render = (parent: string | null, depth: number): React.ReactNode[] =>
-    childrenOf(items, parent).filter((c) => !banned.has(c.id)).flatMap((c) => [
+    childrenOf(items, parent).filter((c) => !banned.has(c.id) && (!onlyFolders || c.kind === 'folder')).sort((a, b) => Number(b.kind === 'folder') - Number(a.kind === 'folder') || a.sort_order - b.sort_order).flatMap((c) => [
       <button
         key={c.id}
         onClick={() => { void moveItem(item.id, c.id); onClose() }}
@@ -140,6 +144,7 @@ export function MoveSheet({ item, onClose }: { item: Item; onClose: () => void }
         style={{ paddingLeft: 12 + depth * 18 }}
       >
         {depth > 0 && <CornerDownRight size={13} className="text-muted" />}
+        {c.kind === 'folder' && <FolderIcon size={14} className="shrink-0 text-accent-strong" />}
         <span className="truncate">{c.title}</span>
       </button>,
       ...render(c.id, depth + 1),
