@@ -100,10 +100,12 @@ muted colours; `Hourglass2D` in `src/components/Hourglass.tsx`). All keep the sa
 glass, fading out below it, frozen when paused.
 
 ### Colours
-Settings > Appearance > Colours: a hue slider and a brightness slider (`*_light`, -50..50, migration 0014) for the
-hourglass (glass/outline), the sand, the app background and the freeze colour. Background brightness is clamped per
-theme (light 66..98 % lightness, dark 3..28 %) and `colorVars` recomputes body, muted and accent text so they keep
->= 4.5:1 contrast against the background and both surfaces (checked for every hue x brightness x theme). Colours:
+Settings > Appearance > Colours: a hue slider per colour and, behind a sun button (one open at a time), a brightness
+slider (`*_light`, -50..50 = black..white, migration 0014) for the hourglass, the sand, the background and the
+freeze colour. The background decides light or dark text/cards whatever the theme: `colorVars` flips them, nudges
+mid tones just past the band where neither works, and keeps body, muted and accent text >= 4.5:1 against the
+background, both surfaces and the accent tint; the hourglass outline stays >= 3:1 and the sand visible in the glass
+(checked for 22,032 hue x brightness x theme combinations). Colours:
 saved per user in `settings` (`hg_hue`, `sand_hue`, `bg_hue`, `freeze_hue`; null = original colours) so they sync across devices.
 `src/lib/customColors.ts` turns a hue into CSS variables for the current theme with fixed lightness/saturation, so
 text keeps its contrast (surfaces and borders are derived from the background hue). Works with all three styles.

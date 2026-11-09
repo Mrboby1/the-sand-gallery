@@ -31,6 +31,8 @@ export function ColorSliders() {
   const [draft, setDraft] = useState<CustomColors>(() => fromSettings(s))
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const latest = useRef(draft)
+  /** The one brightness slider that is open (the sun button of a row toggles it). */
+  const [openBright, setOpenBright] = useState<string | null>(null)
   // another copy of these sliders (Settings under the fullscreen panel) saved: follow it
   useEffect(() => {
     if (timer.current) return
@@ -61,11 +63,13 @@ export function ColorSliders() {
         const custom = h !== null || (l !== null && l !== 0)
         const track = `linear-gradient(to right, ${[0, 60, 120, 180, 240, 300, 360].map((x) => `hsl(${x} ${Math.max(r.sat, 45)}% 55%)`).join(', ')})`
         const hh = h ?? r.def
-        const bright = `linear-gradient(to right, hsl(${hh} ${r.sat}% 12%), hsl(${hh} ${r.sat}% 50%), hsl(${hh} ${r.sat}% 92%))`
+        const bright = `linear-gradient(to right, #000, hsl(${hh} ${Math.max(r.sat, 50)}% 50%), #fff)`
+        const open = openBright === r.light
+        const lit = l !== null && l !== 0
         return (
           <div key={r.hue}>
-            <div className="flex items-center gap-3">
-              <span className="w-24 shrink-0 text-sm">{r.label}</span>
+            <div className="flex items-center gap-2.5">
+              <span className="w-[5.25rem] shrink-0 text-sm">{r.label}</span>
               <span className="h-6 w-6 shrink-0 rounded-full border border-line" style={{ background: r.swatch }} />
               <input
                 type="range" min={0} max={359} value={hh} aria-label={r.label}
@@ -74,29 +78,40 @@ export function ColorSliders() {
                 style={{ background: track, opacity: h === null ? 0.55 : 1 }}
               />
               <button
+                onClick={() => setOpenBright(open ? null : r.light)}
+                aria-expanded={open}
+                aria-label={`${r.label} ${t('colors.brightness')}`}
+                title={t('colors.brightness')}
+                className={cx('relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition', open ? 'bg-accent-soft text-accent-strong' : 'text-muted hover:bg-surface-2')}
+              >
+                <Sun size={16} />
+                {lit && !open && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-accent" />}
+              </button>
+              <button
                 onClick={() => set({ [r.hue]: null, [r.light]: null } as Partial<CustomColors>)}
                 disabled={!custom}
-                className="h-8 shrink-0 rounded-full px-2.5 text-[12px] text-muted transition hover:bg-surface-2 disabled:opacity-35"
+                className="h-8 shrink-0 rounded-full px-1.5 text-[12px] text-muted transition hover:bg-surface-2 disabled:opacity-35"
               >
                 {t('colors.reset')}
               </button>
             </div>
-            <div className="mt-1.5 flex items-center gap-3" title={r.hint}>
-              <span className="inline-flex w-24 shrink-0 items-center gap-1 pl-0.5 text-[12px] text-muted"><Sun size={12} /> {t('colors.brightness')}</span>
-              <span className="w-6 shrink-0" />
+            {open && <div className="sheet mt-2 flex items-center gap-3 rounded-2xl bg-surface-2 px-3 py-2.5">
+              <Sun size={14} className="shrink-0 text-muted" />
+              <span className="shrink-0 text-[12px] text-muted">{t('colors.dark')}</span>
               <input
-                type="range" min={-50} max={50} step={1} value={l ?? 0} aria-label={`${r.label} ${t('colors.brightness')}`}
+                autoFocus
+                type="range" min={-50} max={50} step={1} value={l ?? 0} aria-label={`${r.label} ${t('colors.brightnessLevel')}`}
                 onChange={(e) => set({ [r.light]: Number(e.target.value) } as Partial<CustomColors>)}
                 onDoubleClick={() => set({ [r.light]: null } as Partial<CustomColors>)}
-                className="hue-slider bright-slider h-3 min-w-0 flex-1 cursor-pointer appearance-none rounded-full"
-                style={{ background: bright, opacity: l === null || l === 0 ? 0.6 : 1 }}
+                className="hue-slider bright-slider h-3.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full ring-1 ring-line"
+                style={{ background: bright }}
               />
-              <span className="w-[58px] shrink-0 text-center text-[11px] tabular text-muted">{l ? (l > 0 ? `+${l}` : l) : ''}</span>
-            </div>
+              <span className="shrink-0 text-[12px] text-muted">{t('colors.light')}</span>
+            </div>}
+            {open && r.hint && <p className="mt-1.5 px-1 text-[12px] text-muted">{r.hint}</p>}
           </div>
         )
       })}
-      <p className="-mt-1 text-[12px] text-muted">{t('colors.bgBrightnessHint')}</p>
       <button
         onClick={() => {
           const before = { ...latest.current }
