@@ -786,6 +786,40 @@ export function deleteCost(id: string) {
 }
 
 // ---------------------------------------------------------------- statuses
+/** Is this item itself finished (its own status counts as finished)? */
+export function ownFinished(item: Item, statuses: Status[] = get().data.statuses): boolean {
+  return !!item.status_id && !!statuses.find((s) => s.id === item.status_id)?.is_finished
+}
+
+/** Moves a project to Finished: gives it the first "finished" status (creating "Done" if there is none). Undo-able. */
+export async function markFinished(id: string) {
+  const d = get().data
+  const it = d.items.find((i) => i.id === id)
+  if (!it) return
+  let fin = [...d.statuses].sort((a, b) => a.sort_order - b.sort_order).find((s) => s.is_finished)
+  if (!fin) {
+    const row: Status = { id: uuid(), name: t('finished.doneStatus'), color: '#5f9e6e', is_finished: true, sort_order: d.statuses.length ? Math.max(...d.statuses.map((s) => s.sort_order)) + 1 : 0 }
+    await commit((s) => ({ ...s, statuses: [...s.statuses, row] }), [{ k: 'insert', table: 'statuses', rows: [row] }])
+    fin = row
+  }
+  if (d.sessions.some((s) => !s.ended_at && (s.item_id === id || descendantIds(d.items, id).has(s.item_id)))) await stopTimer()
+  const before = it.status_id
+  await updateItem(id, { status_id: fin.id })
+  toast(t('finished.moved', { title: it.title }), 'info', { label: t('common.undo'), run: () => void updateItem(id, { status_id: before }) })
+}
+
+/** Back to work: the "In progress" status if there is one, else the first status that is not finished. Undo-able. */
+export async function reopenItem(id: string) {
+  const d = get().data
+  const it = d.items.find((i) => i.id === id)
+  if (!it) return
+  const open = [...d.statuses].sort((a, b) => a.sort_order - b.sort_order).filter((s) => !s.is_finished)
+  const to = open.find((s) => /in progress/i.test(s.name)) ?? open[0] ?? null
+  const before = it.status_id
+  await updateItem(id, { status_id: to?.id ?? null })
+  toast(t('finished.reopened', { title: it.title }), 'info', { label: t('common.undo'), run: () => void updateItem(id, { status_id: before }) })
+}
+
 export function addStatus(name: string, color: string) {
   const d = get().data
   const row: Status = { id: uuid(), name, color, sort_order: d.statuses.length ? Math.max(...d.statuses.map((s) => s.sort_order)) + 1 : 0 }

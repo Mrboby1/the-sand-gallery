@@ -4,11 +4,9 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { create } from 'zustand'
 import {
   CalendarDays, Copy, FolderInput, Image as ImageIcon, LayoutTemplate, Link2, MoreVertical, Pause, Pencil, Play, Tag,
-  Trash2, CircleDot, X,
-} from 'lucide-react'
+  Trash2, CircleDot, X, CheckCircle2, RotateCcw } from 'lucide-react'
 import {
-  useApp, deleteWithUndo, duplicateItem, startTimer, stopTimer, toast, updateItem,
-} from '../store/app'
+  useApp, deleteWithUndo, duplicateItem, startTimer, stopTimer, toast, updateItem, markFinished, ownFinished, reopenItem } from '../store/app'
 import { useRunning } from '../lib/hooks'
 import { MoveSheet, ShareSheet, TagEditor, saveTemplateFlow } from './ItemBits'
 import { FolderDeleteSheet } from './Folder'
@@ -131,7 +129,11 @@ export function ItemMenuHost() {
     { key: 'share', icon: <Link2 size={17} />, label: t('item.share'), run: () => openSub('share') },
     { key: 'delete', icon: <Trash2 size={17} />, label: t('folder.delete'), danger: true, run: () => openSub('folderDelete') },
   ]
+  const finishedNow = ownFinished(item, statuses)
   const itemActions: Action[] = [
+    finishedNow
+      ? { key: 'reopen', icon: <RotateCcw size={17} />, label: t('finished.reopen'), run: () => { closeMenu(); void reopenItem(item.id) } }
+      : { key: 'finish', icon: <CheckCircle2 size={17} />, label: t('finished.mark'), run: () => { closeMenu(); void markFinished(item.id) } },
     { key: 'rename', icon: <Pencil size={17} />, label: t('item.rename'), run: async () => { closeMenu(); const v = await promptDialog(t('item.rename'), item.title); if (v) void updateItem(item.id, { title: v }) } },
     { key: 'status', icon: <CircleDot size={17} />, label: t('menu.status'), run: () => openSub('status') },
     { key: 'tags', icon: <Tag size={17} />, label: t('menu.tags'), run: () => openSub('tags') },

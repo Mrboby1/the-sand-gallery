@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
-  CalendarDays, ChevronRight, Copy, FolderInput, ListPlus, LayoutTemplate, Link2, MoreHorizontal, Pencil, Plus, Trash2, X,
+  CalendarDays, CheckCircle2, ChevronRight, Copy, FolderInput, RotateCcw, ListPlus, LayoutTemplate, Link2, MoreHorizontal, Pencil, Plus, Trash2, X,
 } from 'lucide-react'
 import {
-  useApp, childrenOf, createItem, deleteItem, descendantIds, duplicateItem, toast, updateItem,
+  useApp, childrenOf, createItem, deleteItem, descendantIds, duplicateItem, markFinished, ownFinished, reopenItem, toast, updateItem,
 } from '../store/app'
 import { useIsFinished, useLocalPref, useTotals } from '../lib/hooks'
 import { FinishedView } from '../components/FinishedView'
@@ -98,6 +98,9 @@ export function ItemPage() {
     <Menu trigger={(toggle) => <button aria-label={t('common.more')} onClick={toggle} className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-surface-2"><MoreHorizontal size={21} /></button>}>
       {(close) => (
         <>
+          {ownFinished(item, statuses)
+            ? <MenuItem icon={<RotateCcw size={16} />} onClick={() => { close(); void reopenItem(item.id) }}>{t('finished.reopen')}</MenuItem>
+            : <MenuItem icon={<CheckCircle2 size={16} />} onClick={() => { close(); void markFinished(item.id) }}>{t('finished.mark')}</MenuItem>}
           <MenuItem icon={<Link2 size={16} />} onClick={() => { close(); setSheet('share') }}>{t('item.share')}</MenuItem>
           <MenuItem icon={<FolderInput size={16} />} onClick={() => { close(); setSheet('move') }}>{t('item.move')}</MenuItem>
           <MenuItem icon={<Copy size={16} />} onClick={async () => { close(); const nid = await duplicateItem(item.id); if (nid) nav(`/i/${nid}`) }}>{t('item.duplicate')}</MenuItem>

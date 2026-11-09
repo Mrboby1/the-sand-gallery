@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Folder as FolderIcon, FolderInput, FolderPlus, Link2, MoreHorizontal, Pencil, SquarePlus, Trash2 } from 'lucide-react'
 import type { Item, Media } from '../lib/types'
 import { useApp, childrenOf, deleteWithUndo, moveItem, updateItem } from '../store/app'
-import { useCoverFor, useTotals } from '../lib/hooks'
+import { useCoverFor, useFinishedProjects, useTotals } from '../lib/hooks'
 import { fmtDuration } from '../lib/time'
 import { Thumb } from './Tile'
 import { AlbumTile } from './FinishedView'
@@ -153,9 +153,13 @@ export function FolderPage({ item, crumbs }: { item: Item; crumbs: ReactNode }) 
   const totals = useTotals()
   const covers = useCoverFor()
   const nav = useNavigate()
-  const [tab, setTab] = useState<'gallery' | 'notes'>('gallery')
+  const [tab, setTab] = useState<'gallery' | 'notes' | 'finished'>('gallery')
+  const fin = useFinishedProjects()
   const [sheet, setSheet] = useState<null | 'project' | 'folder' | 'move' | 'share' | 'delete'>(null)
-  const kids = useMemo(() => foldersFirst(childrenOf(items, item.id)), [items, item.id])
+  const allKids = useMemo(() => foldersFirst(childrenOf(items, item.id)), [items, item.id])
+  // finished projects are kept apart (the Finished pill); the gallery shows what is still going on
+  const kids = useMemo(() => allKids.filter((k) => !fin.isFinished(k.id)), [allKids, fin])
+  const finishedKids = useMemo(() => allKids.filter((k) => fin.isFinished(k.id)), [allKids, fin])
   const nFolders = kids.filter(isFolder).length
   const nProjects = kids.length - nFolders
   const total = totals.total(item.id)
@@ -188,15 +192,22 @@ export function FolderPage({ item, crumbs }: { item: Item; crumbs: ReactNode }) 
           <h1 dir="auto" className="font-display text-[32px] font-semibold leading-tight [overflow-wrap:anywhere] sm:text-5xl">{item.title}</h1>
           {line && <p className="mt-2 text-[13px] text-muted">{line}</p>}
           <div className="mt-4 inline-flex rounded-full bg-surface-2 p-1" role="tablist">
-            {(['gallery', 'notes'] as const).map((tb) => (
+            {(finishedKids.length ? (['gallery', 'notes', 'finished'] as const) : (['gallery', 'notes'] as const)).map((tb) => (
               <button key={tb} role="tab" aria-selected={tab === tb} onClick={() => setTab(tb)} className={cx('h-8 rounded-full px-4 text-[14px] transition', tab === tb ? 'bg-surface font-medium text-ink shadow-sm' : 'text-muted')}>
-                {t(tb === 'gallery' ? 'tabs.gallery' : 'tabs.notes')}
+                {tb === 'finished' ? <>{t('finished.tab')} <span className="tabular text-muted">{finishedKids.length}</span></> : t(tb === 'gallery' ? 'tabs.gallery' : 'tabs.notes')}
               </button>
             ))}
           </div>
         </header>
 
         {tab === 'notes' && <div className="mx-auto max-w-2xl"><NotesTab item={item} /></div>}
+        {tab === 'finished' && (
+          <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
+            {finishedKids.map((k) => (
+              <ItemPress key={k.id} itemId={k.id}><AlbumTile item={k} cover={covers.cover(k)} count={covers.countMedia(k.id)} /></ItemPress>
+            ))}
+          </div>
+        )}
         {tab === 'gallery' && (
           <div className="flex flex-col gap-10">
             {kids.length > 0 ? (

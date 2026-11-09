@@ -127,6 +127,14 @@ A paused hourglass blends its outline, rims and sand toward `--freeze` (`freeze_
 transitions, the canvas grains blend over ~0.8 s, and a static frost layer (tint, frosted edges, crystals) fades in.
 The timer card and time text take an icy tint too. Small CSS glyphs get a lighter tint. Nothing animates while frozen.
 
+### Finished projects
+A project is finished when its status (or an ancestor's) has `is_finished` (Done and Sold by default; the database stamps
+`finished_at`). Finished projects (top level or directly in a folder) leave the main gallery and folder galleries: home
+has an "Active | Finished n" switch (`?show=finished`, only shown once something is finished) with search and tag
+filters, sorted by finish date, folders a "Finished n" pill. Long-press / the ⋯ menu: Mark finished (first finished
+status, creates "Done" if none) and Reopen ("In progress", else the first open status), both with Undo. No schema
+change: offline mode and export/import carry statuses and items as before.
+
 ### Folders
 An item with `kind = 'folder'` (migration 0013; existing rows are 'item') groups projects and other folders. Folders sit at
 the top level or inside folders, never inside a project (enforced by `items_check_parent`, the Move sheet and

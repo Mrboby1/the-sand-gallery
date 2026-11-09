@@ -68,6 +68,22 @@ export function usePeriodTotal(period: SummaryPeriod, itemIds?: Set<string>) {
   }, [sessions, weekStart, now, itemIds, period])
 }
 
+/**
+ * Projects that are finished, split from the active ones. "Projects" are items at the top level or directly inside a
+ * folder (subtasks stay inside their project). `under`: only that folder's (null = everywhere, for the Finished tab).
+ */
+export function useFinishedProjects() {
+  const items = useApp((s) => s.data.items)
+  const isFinished = useIsFinished()
+  return useMemo(() => {
+    const byId = new Map(items.map((i) => [i.id, i]))
+    const isProject = (i: Item) => i.kind !== 'folder' && (!i.parent_id || byId.get(i.parent_id)?.kind === 'folder')
+    const all = items.filter((i) => isProject(i) && isFinished(i.id))
+      .sort((a, b) => (b.finished_at ?? b.updated_at).localeCompare(a.finished_at ?? a.updated_at))
+    return { all, isFinished, isProject }
+  }, [items, isFinished])
+}
+
 /** Picks the media to show on an item's tile: its cover, else its newest photo, else a descendant's. */
 export function useCoverFor() {
   const items = useApp((s) => s.data.items)
