@@ -130,6 +130,11 @@ export interface Settings {
   bg_hue: number | null
   /** Colour of the frozen (paused) hourglass; null = icy blue. */
   freeze_hue: number | null
+  /** Brightness of each colour, -50..50 (null/0 = normal). */
+  hg_light?: number | null
+  sand_light?: number | null
+  bg_light?: number | null
+  freeze_light?: number | null
   /** Period of the "time worked" summary (home header, Time log). */
   summary_period: SummaryPeriod
   updated_at?: ISODate

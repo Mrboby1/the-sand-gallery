@@ -109,6 +109,8 @@ body {
 /* hue sliders: a round, outlined thumb on a rainbow track */
 .hue-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; border-radius: 9999px; background: #fff; border: 2px solid var(--sg-ink); box-shadow: 0 1px 3px rgb(0 0 0 / 0.3); }
 .hue-slider::-moz-range-thumb { width: 22px; height: 22px; border-radius: 9999px; background: #fff; border: 2px solid var(--sg-ink); }
+.bright-slider::-webkit-slider-thumb { width: 17px; height: 17px; }
+.bright-slider::-moz-range-thumb { width: 17px; height: 17px; }
 
 /* search result target: a short highlight after jumping to it */
 @keyframes flash-ring { 0%, 60% { box-shadow: 0 0 0 3px var(--sg-accent); } 100% { box-shadow: 0 0 0 3px transparent; } }

@@ -28,7 +28,13 @@ export function TimerNotifier() {
   const sand = useApp((s) => s.data.settings.sand_hue ?? null)
   const bg = useApp((s) => s.data.settings.bg_hue ?? null)
   const fr = useApp((s) => s.data.settings.freeze_hue ?? null)
-  useEffect(() => { if (phase === 'ready') applyColors({ hg_hue: hg, sand_hue: sand, bg_hue: bg, freeze_hue: fr }) }, [phase, hg, sand, bg, fr])
+  const hl = useApp((s) => s.data.settings.hg_light ?? null)
+  const sl = useApp((s) => s.data.settings.sand_light ?? null)
+  const bl = useApp((s) => s.data.settings.bg_light ?? null)
+  const fl = useApp((s) => s.data.settings.freeze_light ?? null)
+  useEffect(() => {
+    if (phase === 'ready') applyColors({ hg_hue: hg, sand_hue: sand, bg_hue: bg, freeze_hue: fr, hg_light: hl, sand_light: sl, bg_light: bl, freeze_light: fl })
+  }, [phase, hg, sand, bg, fr, hl, sl, bl, fl])
 
   useEffect(() => {
     if (phase !== 'ready') return

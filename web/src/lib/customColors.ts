@@ -1,12 +1,21 @@
-// User colours (Settings > Appearance): a hue for the hourglass glass/outline, one for the sand, one for the
-// app background. Only the hue is chosen; lightness and saturation are fixed per theme so text stays readable
-// (surfaces and borders are derived from the background hue). null = the original colours from index.css.
+// User colours (Settings > Appearance): a hue and a brightness for the hourglass glass/outline, the sand, the app
+// background and the freeze (paused) colour. null = the original colours from index.css.
+// Saturation is fixed per theme. Brightness moves lightness within a range; for the background the range is clamped
+// per theme and the text colours are recomputed so body and muted text keep a contrast of at least 4.5:1 against the
+// background and every surface (see textFor).
 
-export interface CustomColors { hg_hue: number | null; sand_hue: number | null; bg_hue: number | null; freeze_hue?: number | null }
+export interface CustomColors {
+  hg_hue: number | null; sand_hue: number | null; bg_hue: number | null; freeze_hue?: number | null
+  /** Brightness -50..50 (0/null = normal). */
+  hg_light?: number | null; sand_light?: number | null; bg_light?: number | null; freeze_light?: number | null
+}
+
+/** Default hues, used when only the brightness is changed. */
+export const DEFAULT_HUES = { hg: 29, sand: 32, bg: 36, freeze: 200 } as const
 
 const KEY = 'sg.colors'
 const VARS = [
-  '--sg-bg', '--sg-surface', '--sg-surface-2', '--sg-line',
+  '--sg-bg', '--sg-surface', '--sg-surface-2', '--sg-line', '--sg-ink', '--sg-muted', '--sg-accent-strong',
   '--glass-line', '--rim', '--hg2-wall', '--glass-fill',
   '--sand-1', '--sand-2', '--sand-3', '--hg2-sand', '--freeze',
 ]
@@ -16,32 +25,96 @@ function read(): CustomColors {
   try { return { hg_hue: null, sand_hue: null, bg_hue: null, ...(JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<CustomColors>) } } catch { return { hg_hue: null, sand_hue: null, bg_hue: null } }
 }
 
-const hsl = (h: number, s: number, l: number) => `hsl(${Math.round(h)} ${s}% ${l}%)`
+const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x))
+const hsl = (h: number, s: number, l: number) => `hsl(${Math.round(h)} ${s}% ${Math.round(clamp(l, 0, 100) * 10) / 10}%)`
+
+/** HSL (deg, %, %) -> sRGB 0..1 */
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  s /= 100; l /= 100
+  const k = (n: number) => (n + h / 30) % 12
+  const a = s * Math.min(l, 1 - l)
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))
+  return [f(0), f(8), f(4)]
+}
+function luminance([r, g, b]: [number, number, number]): number {
+  const c = (v: number) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+  return 0.2126 * c(r) + 0.7152 * c(g) + 0.0722 * c(b)
+}
+export function contrast(a: number, b: number): number { return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) }
+const lumOf = (h: number, s: number, l: number) => luminance(hslToRgb(h, s, clamp(l, 0, 100)))
+
+/** Lightness shift for a brightness value (-50..50): about +-18 points. */
+const shift = (b: number | null | undefined) => (b ?? 0) * 0.36
+const has = (v: number | null | undefined) => v !== null && v !== undefined
+const active = (hue: number | null | undefined, light: number | null | undefined) => has(hue) || (has(light) && light !== 0)
+
+/**
+ * Background lightness for a brightness value. Light theme: 66..98 (normal 94); dark theme: 3..28 (normal 7).
+ * Outside those ranges the surfaces would stop looking like the theme (and text could not stay readable).
+ */
+export function bgLightness(b: number, dark: boolean): number {
+  if (dark) return b >= 0 ? 7 + b * (21 / 50) : 7 + b * (4 / 50)
+  return b >= 0 ? 94 + b * (4 / 50) : 94 + b * (28 / 50)
+}
+
+/**
+ * Text colours for a set of background lightnesses: the darkest/lightest ink and a muted tone that both keep a
+ * contrast of at least 4.5:1 against every one of them.
+ */
+function textFor(h: number, surfaces: { s: number; l: number }[], dark: boolean): { ink: string; muted: string; accent: string } {
+  const lums = surfaces.map((x) => lumOf(h, x.s, x.l))
+  const worst = (l: number, s: number) => Math.min(...lums.map((bl) => contrast(lumOf(h, s, l), bl)))
+  // ink: the theme's ink, pushed further from the background if needed
+  let inkL = dark ? 91 : 13
+  while (worst(inkL, 30) < 7 && (dark ? inkL < 99 : inkL > 2)) inkL += dark ? 1 : -1
+  // muted: as soft as possible while still >= 4.5:1
+  let mutedL = dark ? 58 : 40
+  while (worst(mutedL, 16) < 4.6 && (dark ? mutedL < inkL : mutedL > inkL)) mutedL += dark ? 1 : -1
+  // accent-coloured text (links, icons): the theme's accent, darker/lighter until it reads at 4.5:1 too
+  let accL = dark ? 70 : 31
+  while (Math.min(...lums.map((bl) => contrast(lumOf(32, 80, accL), bl))) < 4.6 && (dark ? accL < 95 : accL > 5)) accL += dark ? 1 : -1
+  return { ink: hsl(h, 30, inkL), muted: hsl(h, 16, mutedL), accent: hsl(32, 80, accL) }
+}
 
 /** CSS variable values for the current theme. */
 export function colorVars(c: CustomColors, dark: boolean): Record<string, string> {
   const v: Record<string, string> = {}
-  if (c.bg_hue !== null) {
-    const h = c.bg_hue
-    Object.assign(v, dark
-      ? { '--sg-bg': hsl(h, 18, 7), '--sg-surface': hsl(h, 16, 10.5), '--sg-surface-2': hsl(h, 14, 15), '--sg-line': hsl(h, 12, 21), '--glass-fill': hsl(h, 14, 13) }
-      : { '--sg-bg': hsl(h, 42, 94), '--sg-surface': hsl(h, 50, 98.5), '--sg-surface-2': hsl(h, 30, 91), '--sg-line': hsl(h, 26, 83), '--glass-fill': hsl(h, 50, 98) })
-  }
-  if (c.hg_hue !== null) {
-    const h = c.hg_hue
-    const line = dark ? hsl(h, 32, 72) : hsl(h, 38, 27)
-    Object.assign(v, { '--glass-line': line, '--rim': line, '--hg2-wall': dark ? hsl(h, 18, 70) : hsl(h, 22, 22) })
-  }
-  if (c.sand_hue !== null) {
-    const h = c.sand_hue
+  if (active(c.bg_hue, c.bg_light)) {
+    const h = c.bg_hue ?? DEFAULT_HUES.bg
+    const L = bgLightness(c.bg_light ?? 0, dark)
+    const s = dark
+      ? { bg: [18, L], surface: [16, L + 3.5], surface2: [14, L + 8], line: [12, L + 14], glass: [14, L + 6] }
+      : { bg: [42, L], surface: [50, Math.min(99.5, L + 4.5)], surface2: [30, L - 3], line: [26, L - 11], glass: [50, Math.min(99, L + 4)] }
     Object.assign(v, {
-      '--sand-1': hsl(h, 78, dark ? 70 : 74),
-      '--sand-2': hsl(h, 62, dark ? 60 : 57),
-      '--sand-3': hsl(h, 58, dark ? 50 : 45),
-      '--hg2-sand': dark ? hsl(h, 48, 54) : hsl(h, 56, 41),
+      '--sg-bg': hsl(h, s.bg[0], s.bg[1]), '--sg-surface': hsl(h, s.surface[0], s.surface[1]), '--sg-surface-2': hsl(h, s.surface2[0], s.surface2[1]),
+      '--sg-line': hsl(h, s.line[0], s.line[1]), '--glass-fill': hsl(h, s.glass[0], s.glass[1]),
+    })
+    // text stays readable on the background and on both surfaces
+    if ((c.bg_light ?? 0) !== 0) {
+      const t = textFor(h, [{ s: s.bg[0], l: s.bg[1] }, { s: s.surface[0], l: s.surface[1] }, { s: s.surface2[0], l: s.surface2[1] }], dark)
+      v['--sg-ink'] = t.ink
+      v['--sg-muted'] = t.muted
+      v['--sg-accent-strong'] = t.accent
+    }
+  }
+  if (active(c.hg_hue, c.hg_light)) {
+    const h = c.hg_hue ?? DEFAULT_HUES.hg, d = shift(c.hg_light)
+    const line = dark ? hsl(h, 32, clamp(72 + d, 40, 92)) : hsl(h, 38, clamp(27 + d, 8, 60))
+    Object.assign(v, { '--glass-line': line, '--rim': line, '--hg2-wall': dark ? hsl(h, 18, clamp(70 + d, 40, 92)) : hsl(h, 22, clamp(22 + d, 6, 60)) })
+  }
+  if (active(c.sand_hue, c.sand_light)) {
+    const h = c.sand_hue ?? DEFAULT_HUES.sand, d = shift(c.sand_light)
+    Object.assign(v, {
+      '--sand-1': hsl(h, 78, clamp((dark ? 70 : 74) + d, 12, 95)),
+      '--sand-2': hsl(h, 62, clamp((dark ? 60 : 57) + d, 10, 92)),
+      '--sand-3': hsl(h, 58, clamp((dark ? 50 : 45) + d, 8, 88)),
+      '--hg2-sand': dark ? hsl(h, 48, clamp(54 + d, 10, 90)) : hsl(h, 56, clamp(41 + d, 8, 88)),
     })
   }
-  if (c.freeze_hue !== null && c.freeze_hue !== undefined) v['--freeze'] = dark ? hsl(c.freeze_hue, 70, 68) : hsl(c.freeze_hue, 78, 60)
+  if (active(c.freeze_hue, c.freeze_light)) {
+    const h = c.freeze_hue ?? DEFAULT_HUES.freeze, d = shift(c.freeze_light)
+    v['--freeze'] = dark ? hsl(h, 70, clamp(68 + d, 25, 92)) : hsl(h, 78, clamp(60 + d, 20, 90))
+  }
   return v
 }
 

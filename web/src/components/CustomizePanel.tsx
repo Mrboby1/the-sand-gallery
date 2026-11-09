@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, ChevronUp, RotateCcw, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, RotateCcw, Sun, X } from 'lucide-react'
 import { useApp, saveSettings, toast } from '../store/app'
-import { applyColors, type CustomColors } from '../lib/customColors'
+import { DEFAULT_HUES, applyColors, type CustomColors } from '../lib/customColors'
 import { getTheme, setStyle, setTheme, useStyle, type StylePref, type ThemePref } from '../lib/theme'
 import { Hourglass } from './Hourglass'
 import { IconButton, cx } from './ui'
@@ -20,71 +20,90 @@ function Seg({ value, options, onChange }: { value: string; options: { v: string
 }
 
 /** Hue sliders for the hourglass, the sand and the background: live preview, saved (debounced) per user. */
+const fromSettings = (s: Partial<CustomColors>): CustomColors => ({
+  hg_hue: s.hg_hue ?? null, sand_hue: s.sand_hue ?? null, bg_hue: s.bg_hue ?? null, freeze_hue: s.freeze_hue ?? null,
+  hg_light: s.hg_light ?? null, sand_light: s.sand_light ?? null, bg_light: s.bg_light ?? null, freeze_light: s.freeze_light ?? null,
+})
+const ALL_DEFAULT: CustomColors = fromSettings({})
+
 export function ColorSliders() {
   const s = useApp((st) => st.data.settings)
-  const [draft, setDraft] = useState<CustomColors>({ hg_hue: s.hg_hue ?? null, sand_hue: s.sand_hue ?? null, bg_hue: s.bg_hue ?? null, freeze_hue: s.freeze_hue ?? null })
+  const [draft, setDraft] = useState<CustomColors>(() => fromSettings(s))
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const dark = document.documentElement.dataset.theme === 'dark'
   const latest = useRef(draft)
   // another copy of these sliders (Settings under the fullscreen panel) saved: follow it
   useEffect(() => {
-    const next = { hg_hue: s.hg_hue ?? null, sand_hue: s.sand_hue ?? null, bg_hue: s.bg_hue ?? null, freeze_hue: s.freeze_hue ?? null }
     if (timer.current) return
+    const next = fromSettings(s)
     latest.current = next
     setDraft(next)
-  }, [s.hg_hue, s.sand_hue, s.bg_hue, s.freeze_hue])
+  }, [s.hg_hue, s.sand_hue, s.bg_hue, s.freeze_hue, s.hg_light, s.sand_light, s.bg_light, s.freeze_light]) // eslint-disable-line react-hooks/exhaustive-deps
   const set = (patch: Partial<CustomColors>) => {
     const next = { ...latest.current, ...patch }
     latest.current = next
     setDraft(next)
     applyColors(next) // live preview on every move (the sand simulation picks it up at once)
     clearTimeout(timer.current)
-    // only the save is debounced; all three together so a later slider never drops an earlier one
+    // only the save is debounced; everything together so a later slider never drops an earlier one
     timer.current = setTimeout(() => { timer.current = undefined; void saveSettings({ ...latest.current }) }, 500)
   }
-  const rows: { key: keyof CustomColors; label: string; def: number; light: [number, number]; darkSL: [number, number] }[] = [
-    { key: 'hg_hue', label: t('colors.hourglass'), def: 29, light: [38, 27], darkSL: [32, 72] },
-    { key: 'sand_hue', label: t('colors.sand'), def: 32, light: [62, 57], darkSL: [62, 60] },
-    { key: 'bg_hue', label: t('colors.background'), def: 36, light: [42, 90], darkSL: [18, 12] },
-    { key: 'freeze_hue', label: t('colors.freeze'), def: 200, light: [78, 60], darkSL: [70, 68] },
+  const rows: { hue: 'hg_hue' | 'sand_hue' | 'bg_hue' | 'freeze_hue'; light: 'hg_light' | 'sand_light' | 'bg_light' | 'freeze_light'; label: string; def: number; sat: number; swatch: string; hint?: string }[] = [
+    { hue: 'hg_hue', light: 'hg_light', label: t('colors.hourglass'), def: DEFAULT_HUES.hg, sat: 38, swatch: 'var(--glass-line)' },
+    { hue: 'sand_hue', light: 'sand_light', label: t('colors.sand'), def: DEFAULT_HUES.sand, sat: 62, swatch: 'var(--sand-2)' },
+    { hue: 'bg_hue', light: 'bg_light', label: t('colors.background'), def: DEFAULT_HUES.bg, sat: 42, swatch: 'var(--sg-bg)', hint: t('colors.bgBrightnessHint') },
+    { hue: 'freeze_hue', light: 'freeze_light', label: t('colors.freeze'), def: DEFAULT_HUES.freeze, sat: 78, swatch: 'var(--freeze)' },
   ]
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {rows.map((r) => {
-        const v = draft[r.key] ?? null
-        const [sat, light] = dark ? r.darkSL : r.light
-        const track = `linear-gradient(to right, ${[0, 60, 120, 180, 240, 300, 360].map((h) => `hsl(${h} ${Math.max(sat, 45)}% 55%)`).join(', ')})`
+        const h = draft[r.hue] ?? null
+        const l = draft[r.light] ?? null
+        const custom = h !== null || (l !== null && l !== 0)
+        const track = `linear-gradient(to right, ${[0, 60, 120, 180, 240, 300, 360].map((x) => `hsl(${x} ${Math.max(r.sat, 45)}% 55%)`).join(', ')})`
+        const hh = h ?? r.def
+        const bright = `linear-gradient(to right, hsl(${hh} ${r.sat}% 12%), hsl(${hh} ${r.sat}% 50%), hsl(${hh} ${r.sat}% 92%))`
         return (
-          <div key={r.key} className="flex items-center gap-3">
-            <span className="w-24 shrink-0 text-sm">{r.label}</span>
-            <span className="h-6 w-6 shrink-0 rounded-full border border-line" style={{ background: v === null ? undefined : `hsl(${v} ${sat}% ${light}%)` }} />
-            <input
-              type="range"
-              min={0}
-              max={359}
-              value={v ?? r.def}
-              aria-label={r.label}
-              onChange={(e) => set({ [r.key]: Number(e.target.value) } as Partial<CustomColors>)}
-              className="hue-slider h-6 min-w-0 flex-1 cursor-pointer appearance-none rounded-full"
-              style={{ background: track, opacity: v === null ? 0.55 : 1 }}
-            />
-            <button
-              onClick={() => set({ [r.key]: null } as Partial<CustomColors>)}
-              disabled={v === null}
-              className="h-8 shrink-0 rounded-full px-2.5 text-[12px] text-muted transition hover:bg-surface-2 disabled:opacity-35"
-            >
-              {t('colors.reset')}
-            </button>
+          <div key={r.hue}>
+            <div className="flex items-center gap-3">
+              <span className="w-24 shrink-0 text-sm">{r.label}</span>
+              <span className="h-6 w-6 shrink-0 rounded-full border border-line" style={{ background: r.swatch }} />
+              <input
+                type="range" min={0} max={359} value={hh} aria-label={r.label}
+                onChange={(e) => set({ [r.hue]: Number(e.target.value) } as Partial<CustomColors>)}
+                className="hue-slider h-6 min-w-0 flex-1 cursor-pointer appearance-none rounded-full"
+                style={{ background: track, opacity: h === null ? 0.55 : 1 }}
+              />
+              <button
+                onClick={() => set({ [r.hue]: null, [r.light]: null } as Partial<CustomColors>)}
+                disabled={!custom}
+                className="h-8 shrink-0 rounded-full px-2.5 text-[12px] text-muted transition hover:bg-surface-2 disabled:opacity-35"
+              >
+                {t('colors.reset')}
+              </button>
+            </div>
+            <div className="mt-1.5 flex items-center gap-3" title={r.hint}>
+              <span className="inline-flex w-24 shrink-0 items-center gap-1 pl-0.5 text-[12px] text-muted"><Sun size={12} /> {t('colors.brightness')}</span>
+              <span className="w-6 shrink-0" />
+              <input
+                type="range" min={-50} max={50} step={1} value={l ?? 0} aria-label={`${r.label} ${t('colors.brightness')}`}
+                onChange={(e) => set({ [r.light]: Number(e.target.value) } as Partial<CustomColors>)}
+                onDoubleClick={() => set({ [r.light]: null } as Partial<CustomColors>)}
+                className="hue-slider bright-slider h-3 min-w-0 flex-1 cursor-pointer appearance-none rounded-full"
+                style={{ background: bright, opacity: l === null || l === 0 ? 0.6 : 1 }}
+              />
+              <span className="w-[58px] shrink-0 text-center text-[11px] tabular text-muted">{l ? (l > 0 ? `+${l}` : l) : ''}</span>
+            </div>
           </div>
         )
       })}
+      <p className="-mt-1 text-[12px] text-muted">{t('colors.bgBrightnessHint')}</p>
       <button
         onClick={() => {
           const before = { ...latest.current }
-          set({ hg_hue: null, sand_hue: null, bg_hue: null, freeze_hue: null })
+          set({ ...ALL_DEFAULT })
           toast(t('colors.resetDone'), 'info', { label: t('common.undo'), run: () => set(before) })
         }}
-        disabled={Object.values(draft).every((v) => v === null || v === undefined)}
+        disabled={Object.values(draft).every((v) => v === null || v === undefined || v === 0)}
         className="inline-flex h-9 items-center gap-2 self-start rounded-full border border-line px-3.5 text-[13px] font-medium transition hover:bg-surface-2 disabled:opacity-40"
       >
         <RotateCcw size={14} /> {t('colors.resetAll')}
