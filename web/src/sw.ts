@@ -30,6 +30,21 @@ registerRoute(
   }),
 )
 
+// Thumbnails through the Worker (/f/<key>?e=&s=, the free-egress path): cache by path only. Fetched in CORS mode
+// (the Worker allows it) so only real 200s are cached, never an error such as B2 refusing downloads.
+registerRoute(
+  ({ url }) => url.pathname.startsWith('/f/sand-gallery/thumbs/'),
+  new CacheFirst({
+    cacheName: 'sg-thumbs-v2',
+    fetchOptions: { mode: 'cors', credentials: 'omit' },
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [200] }),
+      new ExpirationPlugin({ maxEntries: 800, maxAgeSeconds: 30 * 86400 }),
+      { cacheKeyWillBeUsed: async ({ request }) => { const u = new URL(request.url); return u.origin + u.pathname } },
+    ],
+  }),
+)
+
 // ---------------------------------------------------------------- push
 interface PushData { type: 'timer-start' | 'timer-stop' | 'timer-reminder' | 'test'; session_id?: string; item_id?: string; title?: string; started_at?: string }
 

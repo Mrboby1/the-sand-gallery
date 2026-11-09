@@ -44,10 +44,14 @@ Bucket `sand-gallery-ypghnj`. **Every key starts with `sand-gallery/`** and the 
 - thumbnails `sand-gallery/thumbs/<user>/<item>/<uuid>.webp` (made in the browser: resized photo / video poster frame)
 - backups `sand-gallery/backups/YYYY-MM-DD.json`
 
-The browser uploads straight to B2 with presigned PUT URLs and reads with presigned GET URLs, both from the Worker
-after it verifies the Supabase JWT. The Worker only signs keys under the caller's own `media/<uid>/` or
-`thumbs/<uid>/` folders. GET URLs are signed with a date fixed to the start of the UTC day so they stay identical
-all day, and the service worker caches thumbnails by path.
+The browser uploads straight to B2 with presigned PUT URLs (ingress is free). It never downloads from B2: reads go
+through the Worker at `/f/<key>?e=<expiry>&s=<HMAC>` (B2 -> Cloudflare egress is free under the Bandwidth Alliance;
+B2 -> browser is billable and counts against the shared account's daily cap). `/api/media/urls` (after the JWT and
+allow-list check, only keys under the caller's own `media/<uid>/` or `thumbs/<uid>/`) and share pages issue these links;
+the HMAC key is derived from the B2 application key. Expiry is aligned to the UTC day (share pages: hour), so a link is
+the same all day and caches hit. `/f/` streams from B2 with Range (video seeking), `Cache-Control: private,
+max-age=604800, immutable`, and never caches errors (a B2 refusal, e.g. the daily cap, becomes 502 + `X-Storage-Status`).
+The service worker caches thumbnails by path, fetching in CORS mode so only real 200s are stored.
 
 ### Worker endpoints (`worker/src/index.ts`)
 | | |

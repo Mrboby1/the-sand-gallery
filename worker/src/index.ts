@@ -125,6 +125,83 @@ export async function presign(env: Env, method: 'GET' | 'PUT', key: string, expi
   return signed.url
 }
 
+// ------------------------------------------------------------------ media links through the Worker
+/*
+ * The browser never downloads from B2 directly (B2 egress is billable; B2 -> Cloudflare is free under the
+ * Bandwidth Alliance). /api/media/urls and share pages hand out links to this Worker:
+ *   /f/<key>?e=<expiry, unix s>&s=<HMAC-SHA256(key \n expiry), base64url>
+ * The expiry is aligned to the UTC day (or hour for share pages), so a link stays the same all day and the browser /
+ * service-worker caches hit. The HMAC key is derived from the B2 application key (no extra secret to manage).
+ */
+let linkKeyPromise: Promise<CryptoKey> | null = null
+function linkKey(env: Env): Promise<CryptoKey> {
+  linkKeyPromise ??= (async () => {
+    const enc = new TextEncoder()
+    const root = await crypto.subtle.importKey('raw', enc.encode(env.B2_APPLICATION_KEY), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+    const derived = await crypto.subtle.sign('HMAC', root, enc.encode('sand-gallery media links v1'))
+    return crypto.subtle.importKey('raw', derived, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  })()
+  return linkKeyPromise
+}
+
+async function linkSig(env: Env, key: string, exp: number): Promise<string> {
+  const mac = await crypto.subtle.sign('HMAC', await linkKey(env), new TextEncoder().encode(`${key}\n${exp}`))
+  return b64urlEncode(new Uint8Array(mac))
+}
+
+const LINK_MAX_AGE = 3 * 86400
+
+/** A Worker link for one of our objects, valid 1-2 days ('day') or 1-2 hours ('hour'). */
+export async function mediaLink(env: Env, origin: string, key: string, window: 'day' | 'hour' = 'day'): Promise<string> {
+  if (!safeKey(key)) throw new HttpError(400, 'bad key')
+  const unit = window === 'day' ? 86400 : 3600
+  const exp = (Math.floor(Date.now() / 1000 / unit) + 2) * unit
+  const path = key.split('/').map(encodeURIComponent).join('/')
+  return `${origin}/f/${path}?e=${exp}&s=${await linkSig(env, key, exp)}`
+}
+
+/** Checks a /f/ link; returns the object key or throws (400 bad key, 403 expired / bad signature). */
+export async function checkMediaLink(env: Env, url: URL, nowSec = Date.now() / 1000): Promise<string> {
+  let key: string
+  try { key = url.pathname.slice('/f/'.length).split('/').map(decodeURIComponent).join('/') } catch { throw new HttpError(400, 'bad key') }
+  if (!safeKey(key)) throw new HttpError(400, 'bad key')
+  const exp = Number(url.searchParams.get('e'))
+  const sig = url.searchParams.get('s') ?? ''
+  if (!Number.isInteger(exp) || exp < nowSec || exp > nowSec + LINK_MAX_AGE) throw new HttpError(403, 'link expired')
+  if (!sameString(sig, await linkSig(env, key, exp))) throw new HttpError(403, 'bad signature')
+  return key
+}
+
+const SAFE_TYPE = /^(image|video)\/[\w.+-]+$/i
+
+/** GET/HEAD /f/<key>: streams the object from B2 (Range for video seeking), cacheable by the browser. */
+async function serveMedia(env: Env, req: Request, url: URL): Promise<Response> {
+  const base = { 'Access-Control-Allow-Origin': '*', 'Cross-Origin-Resource-Policy': 'cross-origin', 'X-Content-Type-Options': 'nosniff' }
+  let key: string
+  try { key = await checkMediaLink(env, url) } catch (e) {
+    const st = e instanceof HttpError ? e.status : 400
+    return new Response(e instanceof Error ? e.message : 'bad link', { status: st, headers: { ...base, 'Cache-Control': 'no-store' } })
+  }
+  const fwd = new Headers()
+  for (const h of ['Range', 'If-None-Match', 'If-Modified-Since', 'If-Range']) { const v = req.headers.get(h); if (v) fwd.set(h, v) }
+  const res = await b2(env).fetch(objectUrl(env, key).toString(), { method: req.method === 'HEAD' ? 'HEAD' : 'GET', headers: fwd })
+  if (res.status === 404) return new Response('not found', { status: 404, headers: { ...base, 'Cache-Control': 'no-store' } })
+  if (!(res.ok || res.status === 304 || res.status === 416)) {
+    // e.g. B2 refusing downloads (daily cap): say so without leaking B2 details, never cache it
+    console.error('B2 GET failed', res.status, (await res.text().catch(() => '')).slice(0, 300))
+    return new Response('storage unavailable', { status: 502, headers: { ...base, 'Cache-Control': 'no-store', 'X-Storage-Status': String(res.status) } })
+  }
+  const out = new Headers(base)
+  for (const h of ['Content-Length', 'Content-Range', 'Accept-Ranges', 'ETag', 'Last-Modified']) { const v = res.headers.get(h); if (v) out.set(h, v) }
+  const type = res.headers.get('Content-Type') ?? ''
+  out.set('Content-Type', SAFE_TYPE.test(type) ? type : 'application/octet-stream')
+  out.set('Content-Disposition', 'inline')
+  if (!out.has('Accept-Ranges')) out.set('Accept-Ranges', 'bytes')
+  // object keys contain random ids and never change: the browser may keep them for a week
+  out.set('Cache-Control', 'private, max-age=604800, immutable')
+  return new Response(req.method === 'HEAD' ? null : res.body, { status: res.status, headers: out })
+}
+
 async function b2Put(env: Env, key: string, body: string, contentType: string) {
   if (!safeKey(key)) throw new Error('bad key')
   const res = await b2(env).fetch(objectUrl(env, key).toString(), { method: 'PUT', body, headers: { 'Content-Type': contentType } })
@@ -238,7 +315,8 @@ async function mediaUrls(env: Env, req: Request) {
   const { keys } = (await req.json()) as { keys?: unknown[] }
   if (!Array.isArray(keys) || keys.length > 300) throw new HttpError(400, 'bad keys')
   const urls: Record<string, string> = {}
-  for (const k of keys) if (typeof k === 'string' && ownsKey(user.id, k)) urls[k] = await presign(env, 'GET', k)
+  const origin = new URL(req.url).origin
+  for (const k of keys) if (typeof k === 'string' && ownsKey(user.id, k)) urls[k] = await mediaLink(env, origin, k, 'day')
   return { urls }
 }
 
@@ -260,7 +338,7 @@ interface SharedRaw {
   media: { id: string; item_id: string; kind: string; width: number | null; height: number | null; phase: string; created_at: string; object_key: string; thumb_key: string | null }[]
 }
 
-async function share(env: Env, token: string) {
+async function share(env: Env, token: string, origin: string) {
   if (!/^[A-Za-z0-9_-]{20,80}$/.test(token)) return null
   const res = await service(env, 'rpc/shared_gallery', { method: 'POST', body: JSON.stringify({ p_token: token }) })
   if (!res.ok) throw new HttpError(502, `db ${res.status}`)
@@ -268,8 +346,8 @@ async function share(env: Env, token: string) {
   if (!data) return null
   const media = await Promise.all(data.media.map(async ({ object_key, thumb_key, ...m }) => ({
     ...m,
-    url: safeKey(object_key) ? await presign(env, 'GET', object_key, undefined, 'hour') : '',
-    thumb_url: thumb_key && safeKey(thumb_key) ? await presign(env, 'GET', thumb_key, undefined, 'hour') : null,
+    url: safeKey(object_key) ? await mediaLink(env, origin, object_key, 'hour') : '',
+    thumb_url: thumb_key && safeKey(thumb_key) ? await mediaLink(env, origin, thumb_key, 'hour') : null,
   })))
   return { root_id: data.root_id, items: data.items, statuses: data.statuses, media }
 }
@@ -545,12 +623,18 @@ export default {
     const isPublic = path.startsWith('/api/share/') || path === '/api/health' || path === '/api/wake'
     const h = cors(env, req, isPublic)
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: h })
+    if ((req.method === 'GET' || req.method === 'HEAD') && path.startsWith('/f/')) {
+      try { return await serveMedia(env, req, url) } catch (e) {
+        console.error('media proxy', String(e))
+        return new Response('storage unavailable', { status: 502, headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' } })
+      }
+    }
     try {
       if (req.method === 'POST' && path === '/api/media/upload') return json(await mediaUpload(env, req), 200, h)
       if (req.method === 'POST' && path === '/api/media/urls') return json(await mediaUrls(env, req), 200, h)
       if (req.method === 'POST' && path === '/api/media/delete') return json(await mediaDelete(env, req), 200, h)
       if (req.method === 'GET' && path.startsWith('/api/share/')) {
-        const data = await share(env, decodeURIComponent(path.slice('/api/share/'.length)))
+        const data = await share(env, decodeURIComponent(path.slice('/api/share/'.length)), url.origin)
         return data ? json(data, 200, h) : json({ error: 'not found' }, 404, h)
       }
       if (req.method === 'GET' && path === '/api/health') return json(await health(env), 200, h)
