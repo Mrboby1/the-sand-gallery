@@ -80,7 +80,9 @@ export function useFinishedProjects() {
     const isProject = (i: Item) => i.kind !== 'folder' && (!i.parent_id || byId.get(i.parent_id)?.kind === 'folder')
     const all = items.filter((i) => isProject(i) && isFinished(i.id))
       .sort((a, b) => (b.finished_at ?? b.updated_at).localeCompare(a.finished_at ?? a.updated_at))
-    return { all, isFinished, isProject }
+    // the home Finished tab: top-level projects only (finished projects in a folder stay in that folder's Finished pill)
+    const top = all.filter((i) => !i.parent_id)
+    return { all, top, isFinished, isProject }
   }, [items, isFinished])
 }
 

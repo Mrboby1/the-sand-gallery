@@ -131,7 +131,8 @@ The timer card and time text take an icy tint too. Small CSS glyphs get a lighte
 A project is finished when its status (or an ancestor's) has `is_finished` (Done and Sold by default; the database stamps
 `finished_at`). Finished projects (top level or directly in a folder) leave the main gallery and folder galleries: home
 has an "Active | Finished n" switch (`?show=finished`, only shown once something is finished) with search and tag
-filters, sorted by finish date, folders a "Finished n" pill. Long-press / the ⋯ menu: Mark finished (first finished
+filters, sorted by finish date, for top-level projects only; a finished project inside a folder is found through that
+folder's "Finished n" pill. Folders have no status, so they are never finished. Long-press / the ⋯ menu: Mark finished (first finished
 status, creates "Done" if none) and Reopen ("In progress", else the first open status), both with Undo. No schema
 change: offline mode and export/import carry statuses and items as before.
 

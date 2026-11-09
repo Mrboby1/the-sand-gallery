@@ -26,18 +26,18 @@ export function Home() {
   const showFinished = params.get('show') === 'finished'
   const [q, setQ] = useState('')
   const fin = useFinishedProjects()
-  const finishedCount = fin.all.length
+  const finishedCount = fin.top.length
   const shown = useMemo(() => {
     if (showFinished) {
       const needle = q.trim().toLowerCase()
-      return fin.all.filter((i) => (!tag || i.tags.includes(tag)) && (!needle || i.title.toLowerCase().includes(needle) || i.tags.some((tg) => tg.includes(needle))))
+      return fin.top.filter((i) => (!tag || i.tags.includes(tag)) && (!needle || i.title.toLowerCase().includes(needle) || i.tags.some((tg) => tg.includes(needle))))
     }
     // the main gallery: active projects and folders only; finished projects live in the Finished tab
     if (tag) return items.filter((i) => i.tags.includes(tag) && !fin.isFinished(i.id)).sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     return childrenOf(items, null).filter((i) => !fin.isFinished(i.id))
   }, [items, tag, showFinished, q, fin])
   // tag chips: only the tags used in the list being shown
-  const tags = useMemo(() => allTags(showFinished ? fin.all : items.filter((i) => !fin.isFinished(i.id))), [items, showFinished, fin])
+  const tags = useMemo(() => allTags(showFinished ? fin.top : items.filter((i) => !fin.isFinished(i.id))), [items, showFinished, fin])
   const setShow = (finished: boolean) => { setTag(null); setQ(''); setParams(finished ? { show: 'finished' } : {}, { replace: true }) }
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
   const pathOf = (it: { parent_id: string | null }) => {
