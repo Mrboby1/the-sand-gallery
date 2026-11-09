@@ -36,8 +36,10 @@ const G = 0.155 // gravity, viewBox units per step² (≈ 30 steps per second)
 /** Chance per step that the grain in the one-cell neck gets through: a real hourglass only trickles (~20 grains/s). */
 const NECK_PASS = 0.7
 const SLIP = 0.7
-/** Brightness of the three grain shades (subtle variation). */
-const SHADES = [1, 1.09, 0.92]
+/** Brightness of the three grain shades: a hint of texture, not grainy. */
+const SHADES = [1, 1.045, 0.96]
+/** Sideways jitter of falling grains below the neck, growing with the distance fallen (the stream fans out). */
+const FAN = 0.36
 
 export class SandSim {
   readonly cell: number
@@ -144,7 +146,7 @@ export class SandSim {
         if (gy >= this.rowExit) {
           // through the neck: from here it falls freely
           this.sand[i] = 0
-          this.free.push({ x: (gx + 0.5) * this.cell, y: this.wy(gy), vx: (this.rnd() - 0.5) * 0.12, vy: this.cell * 0.8, s: v - 1, incoming: false })
+          this.free.push({ x: (gx + 0.5) * this.cell, y: this.wy(gy), vx: (this.rnd() - 0.5) * 0.2, vy: this.cell * 0.8, s: v - 1, incoming: false })
           continue
         }
         // the neck only trickles; while the pile is below its target it lets even less through, so it builds up
@@ -175,6 +177,11 @@ export class SandSim {
     for (const p of this.free) {
       const prevY = p.y
       p.vy += G
+      if (!p.incoming) {
+        // below the neck the stream spreads out: random sideways nudges that grow the further the grain has fallen
+        const fallen = p.y - this.shape.neckY
+        if (fallen > 0) p.vx += (this.rnd() - 0.5) * FAN * Math.min(1.8, 0.15 + fallen / 40)
+      }
       p.x += p.vx
       p.y += p.vy
       if (p.incoming && p.y > this.shape.glassTop - 2) {
