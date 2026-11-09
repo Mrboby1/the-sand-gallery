@@ -10,3 +10,6 @@ dist/
 *.log
 web/test-results/
 screens/
+
+# owned by sand.cloud, holds secret tooling: never commit (the repo is public)
+infra/

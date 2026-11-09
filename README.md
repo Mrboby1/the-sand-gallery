@@ -212,6 +212,8 @@ automated logins. Email sign-in is **turned off** now (Google-only). To test aga
 and turn it off again.
 
 ## Rules
-Code lives in the PRIVATE repo https://github.com/Mrboby1/the-sand-gallery: push `main` after each commit, never
-force-push, never make it public. Secrets never printed/committed (the Supabase anon key and the VAPID public key
-are public by design; anything from `infra/get-secret.ps1` never). Backblaze: only bucket `sand-gallery-ypghnj`, only `sand-gallery/` keys.
+Code lives in the PUBLIC repo https://github.com/Mrboby1/the-sand-gallery (public since 2026-11-09, at Gabi's request):
+push `main` after each commit, never force-push. Because anyone can read it: never commit secrets or tokens (the
+Supabase anon key and the VAPID public key are public by design; anything from `infra/get-secret.ps1` never), never
+commit real user data, and only commit screenshots of test/demo data (never Gabi's real account). `infra/` stays
+untracked. Backblaze: only bucket `sand-gallery-ypghnj`, only `sand-gallery/` keys.
