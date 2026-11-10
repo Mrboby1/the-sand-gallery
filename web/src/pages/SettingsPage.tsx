@@ -305,6 +305,7 @@ function NotificationsSection() {
 /** Colours: a live preview hourglass (with a Full screen customiser) and the hue sliders. */
 function ColorControls() {
   const [full, setFull] = useState(false)
+  const lookMode = useApp((s) => s.data.settings.look_mode ?? 'same')
   return (
     <div className="mt-5 border-t border-line pt-4">
       <div className="flex items-center gap-4">
@@ -319,6 +320,13 @@ function ColorControls() {
           <div className="text-[13px] text-muted">{t('colors.hint')}</div>
           <button onClick={() => setFull(true)} className="mt-1 text-[13px] font-medium text-accent-strong underline-offset-2 hover:underline">{t('colors.fullscreen')}</button>
         </div>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-medium">{t('look.mode')}</div>
+          <div className="text-[12.5px] text-muted">{lookMode === 'separate' ? t('look.modeSeparateHint') : t('look.modeSameHint')}</div>
+        </div>
+        <Segmented value={lookMode} options={[{ v: 'same', l: t('look.same') }, { v: 'separate', l: t('look.separate') }]} onChange={(v) => saveSettings({ look_mode: v as 'same' | 'separate' })} />
       </div>
       <div className="mt-3"><ColorSliders /></div>
       {full && <CustomizeFullscreen onClose={() => setFull(false)} />}
@@ -411,6 +419,7 @@ function SettingsSearch() {
     { id: 'planning', label: t('settings.weekStarts'), kw: 'week start sunday monday other day' },
     { id: 'appearance', label: t('settings.theme'), kw: 'dark light mode theme system' },
     { id: 'appearance', label: t('settings.style'), kw: 'style flat glossy 2d hourglass look' },
+    { id: 'appearance', label: t('look.mode'), kw: 'look same separate per project each project customise colours subtasks gradient' },
     { id: 'appearance', label: t('colors.title'), kw: 'colour color hue slider background sand hourglass' },
     { id: 'notifications', label: t('notif.timer'), kw: 'notification push allow test phone' },
     { id: 'notifications', label: t('notif.reminder'), kw: 'reminder remind custom interval still working' },

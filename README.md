@@ -137,6 +137,14 @@ A paused hourglass blends its outline, rims and sand toward `--freeze` (`freeze_
 transitions, the canvas grains blend over ~0.8 s, and a static frost layer (tint, frosted edges, crystals) fades in.
 The timer card and time text take an icy tint too. Small CSS glyphs get a lighter tint. Nothing animates while frozen.
 
+### Project looks
+Settings > Appearance > Project looks: "Same for all" (`settings.look_mode = same`, default) or "Separate per project". In
+separate mode a project (top level or directly in a folder) can get its own colours from its ⋯ menu > Customise look
+(`items.look`, jsonb, migration 0017; until then it uses the default colours). Its subtasks either share the look or
+step the sand colour through a gradient from the project's sand to a second colour, evenly across the subtasks in
+reading order (`look.sub`). `LookApplier` (`lib/look.ts`) applies the colours for the page that is open. Theme and
+style stay per device. Switching back to "Same for all" keeps every project's look (unused).
+
 ### Daily review
 `/day` (calendar button in the header; `?d=YYYY-MM-DD`, never in the future): time worked that local day (sessions split
 at midnight, a running timer up to now), time per project (sessions rolled up to their top-level / in-folder

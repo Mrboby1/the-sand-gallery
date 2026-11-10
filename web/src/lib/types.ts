@@ -32,6 +32,8 @@ export interface Item {
   finished_at?: ISODate | null
   /** 'folder' groups projects and folders (no status/timer/costs); missing or 'item' = project/subtask. */
   kind?: 'item' | 'folder'
+  /** This project's own look (colours, subtasks), used when settings.look_mode is 'separate'. See lib/look.ts. */
+  look?: Record<string, unknown> | null
 }
 
 /** One note of an item (an item can have many; newest first, pinned ones on top). */
@@ -139,6 +141,8 @@ export interface Settings {
   freeze_light?: number | null
   /** Period of the "time worked" summary (home header, Time log). */
   summary_period: SummaryPeriod
+  /** 'same': one look everywhere; 'separate': each project may have its own (items.look). */
+  look_mode?: 'same' | 'separate'
   updated_at?: ISODate
 }
 
@@ -209,6 +213,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bg_hue: null,
   freeze_hue: null,
   summary_period: 'week',
+  look_mode: 'same',
 }
 
 export const DEFAULT_STATUSES: Pick<Status, 'name' | 'color' | 'is_finished'>[] = [

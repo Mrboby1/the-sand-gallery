@@ -13,6 +13,7 @@ import { Toasts, WakeLayer } from './components/Shell'
 import { RunningChip } from './components/Timer'
 import { ItemMenuHost } from './components/ItemMenu'
 import { TimerNotifier } from './components/TimerNotifier'
+import { LookApplier } from './lib/look'
 import { DialogHost } from './components/ui'
 import { Hourglass } from './components/Hourglass'
 import { t } from './i18n'
@@ -63,6 +64,7 @@ function Gate() {
       <RunningChip />
       <ItemMenuHost />
       <TimerNotifier />
+      <LookApplier />
     </>
   )
 }

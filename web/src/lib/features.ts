@@ -51,6 +51,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
   { id: 'look', features: [
     { id: 'theme', keywords: 'dark mode light theme' },
     { id: 'styles', keywords: 'style flat glossy 2d hourglass' },
+    { id: 'looks', keywords: 'look per project separate same customise colours subtasks gradient' },
     { id: 'colours', keywords: 'colour color slider hue brightness light dark background sand freeze' },
     { id: 'customise', keywords: 'customise customize full screen palette preview colours style theme' },
   ] },

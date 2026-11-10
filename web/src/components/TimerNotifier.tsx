@@ -4,7 +4,6 @@ import { useRunning } from '../lib/hooks'
 import { alreadyAsked, clearTimer, ensurePush, permission, requestNotifications, showTimer, takePendingStop } from '../lib/notify'
 import { confirmDialog } from './ui'
 import { t } from '../i18n'
-import { applyColors } from '../lib/customColors'
 
 // First timer start on a device: explain, then ask for notification permission (inside the tap).
 setTimerStartHook(() => {
@@ -24,17 +23,7 @@ export function TimerNotifier() {
   const item = useApp((s) => (running ? s.data.items.find((i) => i.id === running.item_id) : undefined))
   const enabled = useApp((s) => s.data.settings.notify_enabled)
   const phase = useApp((s) => s.phase)
-  const hg = useApp((s) => s.data.settings.hg_hue ?? null)
-  const sand = useApp((s) => s.data.settings.sand_hue ?? null)
-  const bg = useApp((s) => s.data.settings.bg_hue ?? null)
-  const fr = useApp((s) => s.data.settings.freeze_hue ?? null)
-  const hl = useApp((s) => s.data.settings.hg_light ?? null)
-  const sl = useApp((s) => s.data.settings.sand_light ?? null)
-  const bl = useApp((s) => s.data.settings.bg_light ?? null)
-  const fl = useApp((s) => s.data.settings.freeze_light ?? null)
-  useEffect(() => {
-    if (phase === 'ready') applyColors({ hg_hue: hg, sand_hue: sand, bg_hue: bg, freeze_hue: fr, hg_light: hl, sand_light: sl, bg_light: bl, freeze_light: fl })
-  }, [phase, hg, sand, bg, fr, hl, sl, bl, fl])
+  // colours are applied by LookApplier (lib/look.ts): the global look, or a project's own one
 
   useEffect(() => {
     if (phase !== 'ready') return

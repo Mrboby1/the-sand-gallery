@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
-  CalendarDays, CheckCircle2, ChevronRight, Copy, FolderInput, RotateCcw, ListPlus, LayoutTemplate, Link2, MoreHorizontal, Pencil, Plus, Trash2, X,
+  CalendarDays, CheckCircle2, ChevronRight, Copy, FolderInput, Palette, RotateCcw, ListPlus, LayoutTemplate, Link2, MoreHorizontal, Pencil, Plus, Trash2, X,
 } from 'lucide-react'
 import {
   useApp, childrenOf, createItem, deleteItem, descendantIds, duplicateItem, markFinished, ownFinished, reopenItem, toast, updateItem,
@@ -9,6 +9,8 @@ import {
 import { useIsFinished, useLocalPref, useTotals } from '../lib/hooks'
 import { FinishedView } from '../components/FinishedView'
 import { FolderPage } from '../components/Folder'
+import { CustomizeFullscreen } from '../components/CustomizePanel'
+import { projectOf } from '../lib/look'
 import { setClientView, useClientView } from '../lib/clientView'
 import { Eye, EyeOff } from 'lucide-react'
 import { AddMenu } from '../components/AddMenu'
@@ -49,6 +51,9 @@ export function ItemPage() {
   const isFinished = useIsFinished()
   const clientView = useClientView()
   const [manage, setManage] = useState(false)
+  const lookMode = useApp((s) => s.data.settings.look_mode)
+  const [lookOpen, setLookOpen] = useState(false)
+  const lookProjectId = useMemo(() => (item ? projectOf(item.id, new Map(items.map((i) => [i.id, i])))?.id : undefined), [items, item])
   useEffect(() => { setManage(false) }, [id])
 
   const kids = useMemo(() => (item ? childrenOf(items, item.id) : []), [items, item])
@@ -101,6 +106,7 @@ export function ItemPage() {
           {ownFinished(item, statuses)
             ? <MenuItem icon={<RotateCcw size={16} />} onClick={() => { close(); void reopenItem(item.id) }}>{t('finished.reopen')}</MenuItem>
             : <MenuItem icon={<CheckCircle2 size={16} />} onClick={() => { close(); void markFinished(item.id) }}>{t('finished.mark')}</MenuItem>}
+          {lookMode === 'separate' && <MenuItem icon={<Palette size={16} />} onClick={() => { close(); setLookOpen(true) }}>{t('look.customise')}</MenuItem>}
           <MenuItem icon={<Link2 size={16} />} onClick={() => { close(); setSheet('share') }}>{t('item.share')}</MenuItem>
           <MenuItem icon={<FolderInput size={16} />} onClick={() => { close(); setSheet('move') }}>{t('item.move')}</MenuItem>
           <MenuItem icon={<Copy size={16} />} onClick={async () => { close(); const nid = await duplicateItem(item.id); if (nid) nav(`/i/${nid}`) }}>{t('item.duplicate')}</MenuItem>
@@ -149,6 +155,7 @@ export function ItemPage() {
         {sheet === 'move' && <MoveSheet item={item} onClose={() => setSheet(null)} />}
         {sheet === 'share' && <ShareSheet item={item} onClose={() => setSheet(null)} />}
         {sheet === 'template' && <ApplyTemplateSheet itemId={item.id} onClose={() => setSheet(null)} />}
+        {lookOpen && lookProjectId && <CustomizeFullscreen projectId={lookProjectId} onClose={() => setLookOpen(false)} />}
       </div>
     )
   }
@@ -242,6 +249,7 @@ export function ItemPage() {
       {sheet === 'move' && <MoveSheet item={item} onClose={() => setSheet(null)} />}
       {sheet === 'share' && <ShareSheet item={item} onClose={() => setSheet(null)} />}
       {sheet === 'template' && <ApplyTemplateSheet itemId={item.id} onClose={() => setSheet(null)} />}
+      {lookOpen && lookProjectId && <CustomizeFullscreen projectId={lookProjectId} onClose={() => setLookOpen(false)} />}
     </div>
   )
 }

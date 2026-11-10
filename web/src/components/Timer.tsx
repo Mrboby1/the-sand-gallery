@@ -8,6 +8,7 @@ import { fmtClock, fmtDuration } from '../lib/time'
 import { Hourglass, sandFill } from './Hourglass'
 import { GrainCount } from './GrainCount'
 import { CustomizePanel, WIDE_QUERY, fitTimer, useBox } from './CustomizePanel'
+import { projectOf } from '../lib/look'
 import { Button, IconButton, cx } from './ui'
 import { t } from '../i18n'
 
@@ -61,6 +62,7 @@ export function FullscreenTimer({ itemId, onClose }: { itemId: string; onClose: 
   const ticking = totals.runningChain.has(itemId)
   const [panel, setPanel] = useState(false)
   const wide = useMediaQuery(WIDE_QUERY)
+  const lookProject = useApp((s) => (s.data.settings.look_mode === 'separate' ? projectOf(itemId, new Map(s.data.items.map((i) => [i.id, i])))?.id : undefined))
   const stage = useRef<HTMLDivElement>(null)
   const box = useBox(stage)
   const fit = fitTimer(box.w, box.h)
@@ -121,7 +123,7 @@ export function FullscreenTimer({ itemId, onClose }: { itemId: string; onClose: 
           </div>
         </div>
       </div>
-      {panel && <CustomizePanel side={wide} onClose={() => setPanel(false)} />}
+      {panel && <CustomizePanel side={wide} onClose={() => setPanel(false)} projectId={lookProject} />}
     </div>,
     document.body,
   )

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronUp, RotateCcw, Sun, X } from 'lucide-react'
-import { useApp, saveSettings, toast } from '../store/app'
-import { DEFAULT_HUES, applyColors, type CustomColors } from '../lib/customColors'
+import { useApp, saveSettings, toast, updateItem } from '../store/app'
+import { DEFAULT_HUES, applyColors, colorVars, type CustomColors } from '../lib/customColors'
+import { globalColors, projectColors, subtaskOrder, type ProjectLook, type SubtaskLook } from '../lib/look'
 import { getTheme, setStyle, setTheme, useStyle, type StylePref, type ThemePref } from '../lib/theme'
 import { Hourglass } from './Hourglass'
 import { IconButton, cx } from './ui'
@@ -26,9 +27,12 @@ const fromSettings = (s: Partial<CustomColors>): CustomColors => ({
 })
 const ALL_DEFAULT: CustomColors = fromSettings({})
 
-export function ColorSliders() {
+export function ColorSliders({ projectId }: { projectId?: string } = {}) {
   const s = useApp((st) => st.data.settings)
-  const [draft, setDraft] = useState<CustomColors>(() => fromSettings(s))
+  const project = useApp((st) => (projectId ? st.data.items.find((i) => i.id === projectId) : undefined))
+  // what the sliders show: one project's colours (separate looks), else the global ones
+  const source = (): CustomColors => (project ? projectColors(project, globalColors(s)) : fromSettings(s))
+  const [draft, setDraft] = useState<CustomColors>(source)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const latest = useRef(draft)
   /** The one brightness slider that is open (the sun button of a row toggles it). */
@@ -36,10 +40,10 @@ export function ColorSliders() {
   // another copy of these sliders (Settings under the fullscreen panel) saved: follow it
   useEffect(() => {
     if (timer.current) return
-    const next = fromSettings(s)
+    const next = source()
     latest.current = next
     setDraft(next)
-  }, [s.hg_hue, s.sand_hue, s.bg_hue, s.freeze_hue, s.hg_light, s.sand_light, s.bg_light, s.freeze_light]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [s.hg_hue, s.sand_hue, s.bg_hue, s.freeze_hue, s.hg_light, s.sand_light, s.bg_light, s.freeze_light, JSON.stringify(project?.look ?? null)]) // eslint-disable-line react-hooks/exhaustive-deps
   const set = (patch: Partial<CustomColors>) => {
     const next = { ...latest.current, ...patch }
     latest.current = next
@@ -47,7 +51,11 @@ export function ColorSliders() {
     applyColors(next) // live preview on every move (the sand simulation picks it up at once)
     clearTimeout(timer.current)
     // only the save is debounced; everything together so a later slider never drops an earlier one
-    timer.current = setTimeout(() => { timer.current = undefined; void saveSettings({ ...latest.current }) }, 500)
+    timer.current = setTimeout(() => {
+      timer.current = undefined
+      if (project) void updateItem(project.id, { look: { ...((project.look ?? {}) as object), ...latest.current } })
+      else void saveSettings({ ...latest.current })
+    }, 500)
   }
   const rows: { hue: 'hg_hue' | 'sand_hue' | 'bg_hue' | 'freeze_hue'; light: 'hg_light' | 'sand_light' | 'bg_light' | 'freeze_light'; label: string; def: number; sat: number; swatch: string; hint?: string }[] = [
     { hue: 'hg_hue', light: 'hg_light', label: t('colors.hourglass'), def: DEFAULT_HUES.hg, sat: 38, swatch: 'var(--glass-line)' },
@@ -178,7 +186,8 @@ export function fitTimer(w: number, h: number): { mode: 'col' | 'row' | 'compact
 }
 
 /** The look controls: a collapsible bottom sheet on phones, a side panel on wide screens. Never covers the timer. */
-export function CustomizePanel({ onClose, side = false }: { onClose?: () => void; side?: boolean }) {
+export function CustomizePanel({ onClose, side = false, projectId }: { onClose?: () => void; side?: boolean; projectId?: string }) {
+  const projectTitle = useApp((st) => (projectId ? st.data.items.find((i) => i.id === projectId)?.title : undefined))
   const [open, setOpen] = useState(true)
   return (
     <div className={cx('relative z-10 shrink-0 border-line bg-surface/95 shadow-lift backdrop-blur', side ? 'flex h-full w-[min(360px,45vw)] flex-col border-l px-5 pt-[calc(0.75rem+env(safe-area-inset-top))]' : 'sheet mx-auto w-full max-w-xl rounded-t-3xl border px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2')}>
@@ -195,7 +204,9 @@ export function CustomizePanel({ onClose, side = false }: { onClose?: () => void
       {(open || side) && (
         <div className={cx('flex flex-col gap-4 overflow-y-auto pb-2 pt-1', side ? 'min-h-0 flex-1' : 'max-h-[38vh]')}>
           <StyleThemeControls />
-          <ColorSliders />
+          {projectId && <p className="-mb-1 rounded-2xl bg-accent-soft px-3 py-2 text-[13px]">{t('look.editingProject', { title: projectTitle ?? '' })}</p>}
+          <ColorSliders projectId={projectId} />
+          {projectId && <ProjectLookExtras projectId={projectId} />}
         </div>
       )}
     </div>
@@ -203,7 +214,7 @@ export function CustomizePanel({ onClose, side = false }: { onClose?: () => void
 }
 
 /** Settings > Colours > Full screen: the big hourglass (sand running as a preview) with the controls beside/below. */
-export function CustomizeFullscreen({ onClose }: { onClose: () => void }) {
+export function CustomizeFullscreen({ onClose, projectId }: { onClose: () => void; projectId?: string }) {
   const [frozen, setFrozen] = useState(false)
   const wide = useMediaQuery(WIDE_QUERY)
   const stage = useRef<HTMLDivElement>(null)
@@ -230,8 +241,71 @@ export function CustomizeFullscreen({ onClose }: { onClose: () => void }) {
           <Hourglass running={!frozen} size={size} />
         </div>
       </div>
-      <CustomizePanel side={wide} />
+      <CustomizePanel side={wide} projectId={projectId} />
     </div>,
     document.body,
+  )
+}
+
+/** A project's own look: subtasks the same or a sand gradient to a second colour, and "back to the global look". */
+function ProjectLookExtras({ projectId }: { projectId: string }) {
+  const project = useApp((st) => st.data.items.find((i) => i.id === projectId))
+  const items = useApp((st) => st.data.items)
+  const settings = useApp((st) => st.data.settings)
+  const look = (project?.look ?? null) as ProjectLook | null
+  const sub: SubtaskLook = look?.sub ?? { mode: 'same', hue: 200, light: 0 }
+  const [draft, setDraft] = useState(sub)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => { if (!timer.current) setDraft(sub) }, [JSON.stringify(look?.sub ?? null)]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!project) return null
+  const save = (next: SubtaskLook) => {
+    setDraft(next)
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => { timer.current = undefined; void updateItem(projectId, { look: { ...((project.look ?? {}) as object), sub: next } }) }, 400)
+  }
+  const n = subtaskOrder(projectId, items).length
+  const base = projectColors(project, globalColors(settings))
+  const dark = document.documentElement.dataset.theme === 'dark'
+  // preview: the sand colour of each subtask (up to 8 steps)
+  const steps = Math.max(2, Math.min(8, n || 5))
+  const swatches = Array.from({ length: steps + 1 }, (_, i) => {
+    const tt = i / steps
+    const d = ((draft.hue - (base.sand_hue ?? DEFAULT_HUES.sand) + 540) % 360) - 180
+    const hue = ((base.sand_hue ?? DEFAULT_HUES.sand) + d * tt + 360) % 360
+    const light = (base.sand_light ?? 0) + (draft.light - (base.sand_light ?? 0)) * tt
+    return colorVars({ hg_hue: null, bg_hue: null, sand_hue: hue, sand_light: light }, dark)['--sand-2']
+  })
+  return (
+    <div className="flex flex-col gap-3 border-t border-line pt-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm">{t('look.subtasks')}</span>
+        <Seg value={draft.mode} options={[{ v: 'same', l: t('look.subSame') }, { v: 'gradient', l: t('look.subGradient') }]} onChange={(v) => save({ ...draft, mode: v as SubtaskLook['mode'] })} />
+      </div>
+      {draft.mode === 'gradient' && (
+        <>
+          <div className="flex items-center gap-2.5">
+            <span className="w-[5.25rem] shrink-0 text-sm">{t('look.gradientTo')}</span>
+            <input type="range" min={0} max={359} value={draft.hue} aria-label={t('look.gradientTo')} onChange={(e) => save({ ...draft, hue: Number(e.target.value) })}
+              className="hue-slider h-6 min-w-0 flex-1 cursor-pointer appearance-none rounded-full"
+              style={{ background: `linear-gradient(to right, ${[0, 60, 120, 180, 240, 300, 360].map((x) => `hsl(${x} 62% 55%)`).join(', ')})` }} />
+          </div>
+          <div className="flex items-center gap-2.5">
+            <span className="w-[5.25rem] shrink-0 text-[12px] text-muted">{t('colors.brightness')}</span>
+            <input type="range" min={-50} max={50} value={draft.light} aria-label={`${t('look.gradientTo')} ${t('colors.brightness')}`} onChange={(e) => save({ ...draft, light: Number(e.target.value) })}
+              className="hue-slider bright-slider h-3.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full ring-1 ring-line"
+              style={{ background: `linear-gradient(to right, #000, hsl(${draft.hue} 62% 50%), #fff)` }} />
+          </div>
+          <div className="flex h-6 overflow-hidden rounded-full ring-1 ring-line" aria-label={t('look.preview')}>
+            {swatches.map((c, i) => <span key={i} className="flex-1" style={{ background: c }} />)}
+          </div>
+          <p className="text-[12px] text-muted">{n ? t('look.gradientHint', { n }) : t('look.gradientHintNone')}</p>
+        </>
+      )}
+      {look && (
+        <button onClick={() => void updateItem(projectId, { look: null })} className="inline-flex h-9 items-center gap-2 self-start rounded-full border border-line px-3.5 text-[13px] font-medium transition hover:bg-surface-2">
+          <RotateCcw size={14} /> {t('look.useGlobal')}
+        </button>
+      )}
+    </div>
   )
 }
