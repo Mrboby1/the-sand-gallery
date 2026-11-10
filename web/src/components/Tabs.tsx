@@ -205,7 +205,7 @@ export function TimeLogTab({ item, hasChildren }: { item: Item; hasChildren: boo
   )
 }
 
-function SessionSheet({ itemId, session, onClose }: { itemId: string; session: Session | null; onClose: () => void }) {
+export function SessionSheet({ itemId, session, onClose }: { itemId: string; session: Session | null; onClose: () => void }) {
   const all = useApp((s) => s.data.sessions)
   const byId = useApp((s) => s.data.items)
   const runningNow = all.find((x) => !x.ended_at)

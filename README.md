@@ -39,9 +39,9 @@ session and opens a new one, atomically, idempotent per session id; `at` = when 
 `item_totals` gives recursive totals in SQL; the app computes the same client-side so parents tick live.
 
 ### Media (Backblaze B2, SHARED account)
-Adding: the normal picker (`accept=image/*,video/*`, multiple) everywhere, plus on touch devices a "Take photo" option
-(empty Photos area, a camera tile in the grid, and + inside a project or folder) that opens the back camera
-(`accept=image/*` `capture=environment`). Both go through `uploadFiles`: thumbnail, upload queue, Worker/B2, same target.
+Adding: one "Add photos / videos" entry (+ menu, the empty Photos area, the Add tile). On touch devices it opens a small
+sheet (`PhotoSourceSheet`): "Take photo" (back camera: `accept=image/*` `capture=environment`) or "Choose from
+gallery" (`accept=image/*,video/*`, multiple); on computers it goes straight to the picker. Both go through `uploadFiles`: thumbnail, upload queue, Worker/B2, same target.
 A photo taken in the app is renamed `SandGallery_YYYYMMDD_HHMMSS.<ext>` and, unless Settings > Photos > "Save camera photos
 to phone" is off (per device, `sg.saveCamera`), the same file is saved to the device at once (anchor download; Android
 Chrome puts it in Downloads/, which Google Photos/Files show), with a toast to save it again via the share sheet or a
@@ -136,6 +136,10 @@ pours in extra grains and the neck lets fewer through, so the hill builds up nat
 A paused hourglass blends its outline, rims and sand toward `--freeze` (`freeze_hue`, default icy blue) with CSS
 transitions, the canvas grains blend over ~0.8 s, and a static frost layer (tint, frosted edges, crystals) fades in.
 The timer card and time text take an icy tint too. Small CSS glyphs get a lighter tint. Nothing animates while frozen.
+
+### Add time log
+The + menu has "Add time log": inside a project/subtask it opens the Time log's session sheet (start, end) for it; on
+home or in a folder it first asks which project (`ProjectPickerSheet`, projects in scope, active first, searchable).
 
 ### Finished projects and the filter
 A project is finished when its status (or an ancestor's) has `is_finished` (Done and Sold by default; the database stamps

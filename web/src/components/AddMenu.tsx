@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Camera, FolderPlus, ImagePlus, ListPlus, MoreHorizontal, Plus, SquarePlus, StickyNote } from 'lucide-react'
+import { Clock, FolderPlus, ImagePlus, ListPlus, MoreHorizontal, Plus, SquarePlus, StickyNote } from 'lucide-react'
+import { PhotoSourceSheet, ProjectPickerSheet } from './PhotoSource'
+import { SessionSheet } from './Tabs'
 import { useMediaQuery } from '../lib/hooks'
 import { cameraFile, saveCameraPhoto } from '../lib/download'
 import { useApp, addNote, createItem, toast, uploadFiles } from '../store/app'
@@ -18,7 +20,10 @@ function countNodes(n: { children?: unknown[] }[]): number {
  * (inside an item) upload photos/videos.
  */
 export function AddMenu({ parentId, parentTitle, parentKind = parentId ? 'item' : undefined, aboveBar = false, variant = 'both' }: { parentId: string | null; parentTitle?: string; parentKind?: 'item' | 'folder'; aboveBar?: boolean; variant?: 'both' | 'fab' | 'button' }) {
-  const [sheet, setSheet] = useState<null | 'menu' | 'item' | 'folder' | 'template'>(null)
+  const [sheet, setSheet] = useState<null | 'menu' | 'item' | 'folder' | 'template' | 'source' | 'pickProject'>(null)
+  /** "Add time log": the project it goes on (asked first on home / in a folder). */
+  const [logFor, setLogFor] = useState<string | null>(null)
+  const touch = useMediaQuery('(pointer: coarse)')
   const nav = useNavigate()
   const file = useRef<HTMLInputElement>(null)
   const camera = useRef<HTMLInputElement>(null)
@@ -55,12 +60,16 @@ export function AddMenu({ parentId, parentTitle, parentKind = parentId ? 'item' 
         inFolder={parentKind === 'folder'}
         canFolder={!parentId || parentKind === 'folder'}
         onPick={(what) => {
-          if (what === 'upload') { setSheet(null); file.current?.click() }
-          else if (what === 'camera') { setSheet(null); camera.current?.click() }
+          // phones: camera or gallery? computers have no camera here: straight to the picker
+          if (what === 'upload') { if (touch) setSheet('source'); else { setSheet(null); file.current?.click() } }
+          else if (what === 'time') { if (parentId && parentKind !== 'folder') { setSheet(null); setLogFor(parentId) } else setSheet('pickProject') }
           else if (what === 'note' && parentId) { setSheet(null); const id = addNote(parentId); nav(`/i/${parentId}?tab=notes&note=${id}`) }
           else if (what !== 'note') setSheet(what)
         }}
       />
+      <PhotoSourceSheet open={sheet === 'source'} onClose={() => setSheet(null)} onCamera={() => camera.current?.click()} onPick={() => file.current?.click()} />
+      {sheet === 'pickProject' && <ProjectPickerSheet scopeId={parentId} onClose={() => setSheet(null)} onPick={(id) => { setSheet(null); setLogFor(id) }} />}
+      {logFor && <SessionSheet itemId={logFor} session={null} onClose={() => setLogFor(null)} />}
       <NewItemSheet open={sheet === 'item'} onClose={() => setSheet(null)} parentId={parentId} stay={!!parentId} />
       <NewItemSheet open={sheet === 'folder'} onClose={() => setSheet(null)} parentId={parentId} kind="folder" stay={!!parentId} />
       {sheet === 'template' && <TemplatePickerSheet parentId={parentId} onClose={() => setSheet(null)} />}
@@ -69,9 +78,9 @@ export function AddMenu({ parentId, parentTitle, parentKind = parentId ? 'item' 
 }
 
 function AddSheet({ open, onClose, onPick, canUpload, parentTitle, inFolder, canFolder }: {
-  open: boolean; onClose: () => void; onPick: (w: 'item' | 'folder' | 'template' | 'upload' | 'camera' | 'note') => void; canUpload: boolean; parentTitle?: string; inFolder: boolean; canFolder: boolean
+  open: boolean; onClose: () => void; onPick: (w: 'item' | 'folder' | 'template' | 'upload' | 'note' | 'time') => void; canUpload: boolean; parentTitle?: string; inFolder: boolean; canFolder: boolean
 }) {
-  const touch = useMediaQuery('(pointer: coarse)')
+  const hasProjects = useApp((s) => s.data.items.some((i) => i.kind !== 'folder'))
   const templates = useApp((s) => s.data.templates)
   /** One row; `more` adds a "⋯" button on the right (e.g. "from a template"). */
   const Opt = ({ icon, title, hint, onClick, more }: { icon: React.ReactNode; title: string; hint: string; onClick: () => void; more?: { label: string; run: () => void } }) => (
@@ -100,8 +109,8 @@ function AddSheet({ open, onClose, onPick, canUpload, parentTitle, inFolder, can
           : <Opt icon={<SquarePlus size={21} />} title={t('add.project')} hint={inFolder ? t('add.projectInFolder', { title: parentTitle ?? '' }) : t('add.projectHint')} onClick={() => onPick('item')} more={fromTemplate} />}
         {canFolder && <Opt icon={<FolderPlus size={21} />} title={t('add.folder')} hint={inFolder ? t('add.folderInFolder', { title: parentTitle ?? '' }) : t('add.folderHint')} onClick={() => onPick('folder')} />}
         {canUpload && <Opt icon={<StickyNote size={21} />} title={t('add.note')} hint={t('add.noteHint', { title: parentTitle ?? '' })} onClick={() => onPick('note')} />}
-        {canUpload && touch && <Opt icon={<Camera size={21} />} title={t('add.camera')} hint={t('add.cameraHint', { title: parentTitle ?? '' })} onClick={() => onPick('camera')} />}
         {canUpload && <Opt icon={<ImagePlus size={21} />} title={t('add.upload')} hint={t('add.uploadHint', { title: parentTitle ?? '' })} onClick={() => onPick('upload')} />}
+        {(canUpload && !inFolder) || hasProjects ? <Opt icon={<Clock size={21} />} title={t('add.time')} hint={canUpload && !inFolder ? t('add.timeHint', { title: parentTitle ?? '' }) : t('add.timePick')} onClick={() => onPick('time')} /> : null}
       </div>
     </Sheet>
   )
