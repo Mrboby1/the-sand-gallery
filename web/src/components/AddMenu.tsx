@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Camera, FolderPlus, ImagePlus, ListPlus, MoreHorizontal, Plus, SquarePlus, StickyNote } from 'lucide-react'
 import { useMediaQuery } from '../lib/hooks'
+import { cameraFile, saveCameraPhoto } from '../lib/download'
 import { useApp, addNote, createItem, toast, uploadFiles } from '../store/app'
 import { NewItemSheet } from './ItemBits'
 import { Button, Sheet, cx } from './ui'
@@ -45,7 +46,7 @@ export function AddMenu({ parentId, parentTitle, parentKind = parentId ? 'item' 
         onChange={(e) => { if (parentId) void uploadFiles(parentId, [...(e.target.files ?? [])]); e.target.value = '' }}
       />
       {/* "Take photo" (phones): the back camera, same upload path and target as the picker */}
-      <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { if (parentId) void uploadFiles(parentId, [...(e.target.files ?? [])]); e.target.value = '' }} />
+      <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { const shot = [...(e.target.files ?? [])].map(cameraFile); e.target.value = ''; if (!shot.length || !parentId) return; void uploadFiles(parentId, shot); shot.forEach(saveCameraPhoto) }} />
       <AddSheet
         open={sheet === 'menu'}
         onClose={() => setSheet(null)}

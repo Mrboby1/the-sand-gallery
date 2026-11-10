@@ -7,6 +7,7 @@ import { ArrowDown, ArrowUp, Bell, Check, Copy, DatabaseBackup, LogOut, Maximize
 import { useNavigate } from 'react-router-dom'
 import { FEATURE_GROUPS, featureHow, featureTitle } from '../lib/features'
 import { flashTo } from './FeaturesPage'
+import { saveCameraEnabled, setSaveCamera } from '../lib/download'
 import { AllowedPeople, DataSection } from './DataSection'
 import {
   useApp, addStatus, addTemplate, backend, deleteStatus, deleteTemplate, moveStatus, revokeShare, saveSettings, shareUrl,
@@ -171,6 +172,10 @@ export function SettingsPage() {
           </Link>
         </Section>
 
+        <Section id="photos" title={t('camera.section')}>
+          <CameraSaveToggle />
+        </Section>
+
         <Section id="data" title={t('data.section')} hint={backend.mode === 'local' ? t('data.sectionHint.offline') : t('data.sectionHint.online')}>
           <DataSection />
         </Section>
@@ -198,6 +203,20 @@ export function SettingsPage() {
         <p className="py-4 text-center text-xs text-muted">{t('app.name')} · v{__APP_VERSION__}</p>
       </main>
       {editTpl && <TemplateSheet tpl={editTpl === 'new' ? null : editTpl} onClose={() => setEditTpl(null)} />}
+    </div>
+  )
+}
+
+/** Per device: after "Take photo", also keep a copy in the phone's gallery (Downloads). */
+function CameraSaveToggle() {
+  const [on, setOn] = useState(saveCameraEnabled)
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <div className="font-medium">{t('camera.setting')}</div>
+        <div className="text-[13px] text-muted">{t('camera.settingHint')}</div>
+      </div>
+      <Switch checked={on} onChange={(v) => { setOn(v); setSaveCamera(v) }} label={t('camera.setting')} />
     </div>
   )
 }
@@ -398,6 +417,7 @@ function SettingsSearch() {
     { id: 'templates', label: t('settings.templates'), kw: 'template subtasks' },
     { id: 'share', label: t('settings.shareLinks'), kw: 'share link revoke public' },
     { id: 'features', label: t('settings.features'), kw: 'features tips help how' },
+    { id: 'photos', label: t('camera.setting'), kw: 'camera photo save phone gallery downloads copy take picture' },
     { id: 'data', label: t('data.export.button'), kw: 'export download file backup save computer zip sandgallery' },
     { id: 'data', label: t('data.import.button'), kw: 'import restore upload file open sandgallery' },
     { id: 'data', label: t('data.mode.offline'), kw: 'offline version no account device install download app local storage' },

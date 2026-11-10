@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertCircle, Camera, ChevronLeft, ChevronRight, CloudUpload, ExternalLink, ImagePlus, MessageSquareText, Pencil, Play, Plus, RotateCw, Star, Trash2, X } from 'lucide-react'
+import { AlertCircle, Camera, ChevronLeft, ChevronRight, CloudUpload, Download, ImagePlus, MessageSquareText, Pencil, Play, Plus, RotateCw, Star, Trash2, X } from 'lucide-react'
 import type { Item, Media } from '../lib/types'
 import { useApp, deleteMedia, dismissUpload, pendingAsMedia, retryUpload, updateItem, updateMedia, uploadFiles } from '../store/app'
+import { cameraFile, downloadMedia, downloadName, saveCameraPhoto } from '../lib/download'
 import { useMediaQuery, useMediaUrl } from '../lib/hooks'
 import { Thumb } from './Tile'
 import { IconButton, confirmDialog, cx } from './ui'
@@ -55,7 +56,7 @@ export function MediaSection({ item }: { item: Item }) {
       {/* no capture attribute: phones offer both the camera and the gallery */}
       <input ref={picker} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { void uploadFiles(item.id, [...(e.target.files ?? [])]); e.target.value = '' }} />
       {/* "Take photo": opens the back camera; the photo takes the same upload path as any other */}
-      <input ref={camera} type="file" accept="image/*" capture="environment" hidden data-testid="camera-input" onChange={(e) => { void uploadFiles(item.id, [...(e.target.files ?? [])]); e.target.value = '' }} />
+      <input ref={camera} type="file" accept="image/*" capture="environment" hidden data-testid="camera-input" onChange={(e) => { const shot = [...(e.target.files ?? [])].map(cameraFile); e.target.value = ''; if (!shot.length) return; void uploadFiles(item.id, shot); shot.forEach(saveCameraPhoto) }} />
 
       {shown.length === 0 && uploads.length === 0 ? (
         touch ? (
@@ -205,7 +206,7 @@ export function Lightbox({ list, index, item, onIndex, onClose, readOnly, noteOp
       <MediaNote key={m.id} media={m} initialOpen={noteOpen} />
       {readOnly ? (
         <div className="flex items-center justify-center gap-2 px-3 py-3 safe-bottom">
-          {url && <LbButton label={t('gallery.download')} onClick={() => window.open(url, '_blank', 'noopener')}><ExternalLink size={16} /></LbButton>}
+          {url && <LbButton label={t('gallery.download')} onClick={() => downloadMedia(url, downloadName(m, item, index))}><Download size={16} /></LbButton>}
         </div>
       ) : (
       <div className="flex flex-wrap items-center justify-center gap-2 px-3 py-3 safe-bottom">
@@ -219,7 +220,7 @@ export function Lightbox({ list, index, item, onIndex, onClose, readOnly, noteOp
             </button>
           ))}
         </div>
-        {url && <LbButton label={t('gallery.download')} onClick={() => window.open(url, '_blank', 'noopener')}><ExternalLink size={16} /></LbButton>}
+        {url && <LbButton label={t('gallery.download')} onClick={() => downloadMedia(url, downloadName(m, item, index))}><Download size={16} /></LbButton>}
         <LbButton
           label={t('gallery.deleteMedia')}
           danger

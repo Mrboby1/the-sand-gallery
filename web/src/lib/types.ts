@@ -72,6 +72,8 @@ export interface Media {
   phase: MediaPhase
   /** Note / caption for this photo or video. */
   note?: string | null
+  /** Original file name (used when it is downloaded). */
+  file_name?: string | null
   created_at: ISODate
 }
 

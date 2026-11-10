@@ -648,7 +648,7 @@ async function uploadOne(id: string) {
     const row: Media = {
       id: job.id, item_id: job.itemId, object_key: job.object_key, thumb_key: job.thumb_key ?? null, kind: job.kind,
       mime: job.mime, size_bytes: job.size, width: job.width, height: job.height, duration_s: job.duration,
-      phase: 'process', created_at: job.created_at,
+      phase: 'process', created_at: job.created_at, file_name: job.name.slice(0, 255) || null,
     }
     await backend.insert('media', [row])
     // Swap to the stored copy; reuse the local blob URLs so the picture does not flicker.

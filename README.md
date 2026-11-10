@@ -42,6 +42,12 @@ session and opens a new one, atomically, idempotent per session id; `at` = when 
 Adding: the normal picker (`accept=image/*,video/*`, multiple) everywhere, plus on touch devices a "Take photo" option
 (empty Photos area, a camera tile in the grid, and + inside a project or folder) that opens the back camera
 (`accept=image/*` `capture=environment`). Both go through `uploadFiles`: thumbnail, upload queue, Worker/B2, same target.
+A photo taken in the app is renamed `SandGallery_YYYYMMDD_HHMMSS.<ext>` and, unless Settings > Photos > "Save camera photos
+to phone" is off (per device, `sg.saveCamera`), the same file is saved to the device at once (anchor download; Android
+Chrome puts it in Downloads/, which Google Photos/Files show), with a toast to save it again via the share sheet or a
+download if the browser held it back. `media.file_name` (migration 0015) keeps the original name; the viewer's
+Download uses it: online through the Worker link with `?dl=1&name=` (Content-Disposition: attachment, sanitised,
+RFC 5987), offline from the local blob.
 
 Bucket `sand-gallery-ypghnj`. **Every key starts with `sand-gallery/`** and the B2 key is restricted to that prefix:
 - originals `sand-gallery/media/<user>/<item>/<uuid>.<ext>`

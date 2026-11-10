@@ -195,7 +195,12 @@ async function serveMedia(env: Env, req: Request, url: URL): Promise<Response> {
   for (const h of ['Content-Length', 'Content-Range', 'Accept-Ranges', 'ETag', 'Last-Modified']) { const v = res.headers.get(h); if (v) out.set(h, v) }
   const type = res.headers.get('Content-Type') ?? ''
   out.set('Content-Type', SAFE_TYPE.test(type) ? type : 'application/octet-stream')
-  out.set('Content-Disposition', 'inline')
+  if (url.searchParams.get('dl') === '1') {
+    // download with a clean file name; ASCII fallback + RFC 5987 UTF-8 version
+    const raw = (url.searchParams.get('name') ?? key.split('/').pop() ?? 'file').replace(/[\u0000-\u001f\u007f"\\/:*?<>|]/g, '_').slice(0, 150) || 'file'
+    const ascii = raw.replace(/[^\x20-\x7e]/g, '_')
+    out.set('Content-Disposition', `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(raw).replace(/['()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase())}`)
+  } else out.set('Content-Disposition', 'inline')
   if (!out.has('Accept-Ranges')) out.set('Accept-Ranges', 'bytes')
   // object keys contain random ids and never change: the browser may keep them for a week
   out.set('Cache-Control', 'private, max-age=604800, immutable')
