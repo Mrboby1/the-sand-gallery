@@ -127,14 +127,14 @@ A paused hourglass blends its outline, rims and sand toward `--freeze` (`freeze_
 transitions, the canvas grains blend over ~0.8 s, and a static frost layer (tint, frosted edges, crystals) fades in.
 The timer card and time text take an icy tint too. Small CSS glyphs get a lighter tint. Nothing animates while frozen.
 
-### Finished projects
+### Finished projects and the filter
 A project is finished when its status (or an ancestor's) has `is_finished` (Done and Sold by default; the database stamps
-`finished_at`). Finished projects (top level or directly in a folder) leave the main gallery and folder galleries: home
-has an "Active | Finished n" switch (`?show=finished`, only shown once something is finished) with search and tag
-filters, sorted by finish date, for top-level projects only; a finished project inside a folder is found through that
-folder's "Finished n" pill. Folders have no status, so they are never finished. Long-press / the ⋯ menu: Mark finished (first finished
-status, creates "Done" if none) and Reopen ("In progress", else the first open status), both with Undo. No schema
-change: offline mode and export/import carry statuses and items as before.
+`finished_at`). Folders have no status, so they are never finished. One filter dropdown (`components/FilterMenu.tsx`)
+above the gallery and inside folders: All / Unfinished / Finished (with counts) and a Tags section; it replaced the
+tag chips and the old Active/Finished switch. Remembered per place in localStorage (`sg.filter.home`,
+`sg.filter.folder.<id>`); home defaults to Unfinished, folders to All. Home lists top-level items only (what is in a
+folder shows in that folder). Long-press / the ⋯ menu: Mark finished (first finished status, creates "Done" if none)
+and Reopen ("In progress", else the first open status), both with Undo. No schema change.
 
 ### Folders
 An item with `kind = 'folder'` (migration 0013; existing rows are 'item') groups projects and other folders. Folders sit at

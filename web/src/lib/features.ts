@@ -13,7 +13,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
     { id: 'folders', keywords: 'folder folders group organise organize gallery new folder move' },
     { id: 'longpress', keywords: 'long press menu right click rename move duplicate delete undo actions' },
     { id: 'status', keywords: 'status pill bar idea progress done sold board' },
-    { id: 'finishedTab', keywords: 'finished done tab separate archive reopen mark finished search' },
+    { id: 'finishedTab', keywords: 'filter finished unfinished all done tag tags separate archive reopen mark finished' },
     { id: 'finished', keywords: 'finished done sold gallery mode album manage' },
     { id: 'clientview', keywords: 'client view hide costs prices eye' },
   ] },
