@@ -130,7 +130,9 @@ The timer card and time text take an icy tint too. Small CSS glyphs get a lighte
 ### Finished projects and the filter
 A project is finished when its status (or an ancestor's) has `is_finished` (Done and Sold by default; the database stamps
 `finished_at`). Folders have no status, so they are never finished. One filter dropdown (`components/FilterMenu.tsx`)
-above the gallery and inside folders: All / Unfinished / Finished (with counts) and a Tags section; it replaced the
+above the gallery and inside folders: All / Unfinished / Finished (with counts) and a Tags section with a search box
+(live, case-insensitive, matches anywhere; Enter picks the first match, Esc clears then closes; focused on computers
+only so phones do not open the keyboard); it replaced the
 tag chips and the old Active/Finished switch. Remembered per place in localStorage (`sg.filter.home`,
 `sg.filter.folder.<id>`); home defaults to Unfinished, folders to All. Home lists top-level items only (what is in a
 folder shows in that folder). Long-press / the ⋯ menu: Mark finished (first finished status, creates "Done" if none)

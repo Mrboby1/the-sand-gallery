@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Check, ChevronDown, Hash, ListFilter } from 'lucide-react'
+import { Check, ChevronDown, Hash, ListFilter, Search } from 'lucide-react'
 import type { Item } from '../lib/types'
 import { Menu, cx } from './ui'
 import { t } from '../i18n'
@@ -84,14 +84,56 @@ export function FilterMenu({ value, onChange, items, isFinished, shown }: {
             <>
               <div className="my-1 h-px bg-line" />
               <div className="px-3 pb-1 pt-1.5 text-[11.5px] font-medium uppercase tracking-wider text-muted">{t('filter.tags')}</div>
-              {row(!value.tag, t('filter.anyTag'), () => { onChange({ ...value, tag: null }); close() })}
-              {tags.map((tg) => (
-                <div key={tg}>{row(value.tag === tg, <span className="inline-flex items-center gap-1"><Hash size={12} className="text-muted" />{tg}</span>, () => { onChange({ ...value, tag: value.tag === tg ? null : tg }); close() })}</div>
-              ))}
+              <TagList tags={tags} current={value.tag} row={row} onPick={(tag) => { onChange({ ...value, tag }); close() }} onClose={close} />
             </>
           )}
         </div>
       )}
     </Menu>
+  )
+}
+
+/**
+ * The Tags section: a small search box (live, case-insensitive, matches anywhere), "Any tag", and the matching tags.
+ * Enter picks the first match; Esc clears the search, or closes the menu when it is already empty. The box gets the
+ * focus on computers only, so phones do not pop up the keyboard.
+ */
+function TagList({ tags, current, row, onPick, onClose }: {
+  tags: string[]; current: string | null
+  row: (active: boolean, label: React.ReactNode, onClick: () => void, count?: number) => React.ReactNode
+  onPick: (tag: string | null) => void; onClose: () => void
+}) {
+  const [q, setQ] = useState('')
+  const desktop = typeof matchMedia !== 'undefined' && matchMedia('(hover: hover) and (pointer: fine)').matches
+  const needle = q.trim().toLowerCase()
+  const shown = needle ? tags.filter((tg) => tg.toLowerCase().includes(needle)) : tags
+  return (
+    <>
+      <div className="relative mx-1.5 mb-1 mt-0.5">
+        <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+        <input
+          autoFocus={desktop}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); if (shown[0]) onPick(shown[0]) }
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              e.stopPropagation()
+              if (q) setQ('')
+              else onClose()
+            }
+          }}
+          placeholder={t('filter.searchTags')}
+          aria-label={t('filter.searchTags')}
+          className="h-9 w-full rounded-xl border border-line bg-surface-2 pl-8 pr-2.5 text-[14px] outline-none focus:border-accent"
+        />
+      </div>
+      {!needle && row(!current, t('filter.anyTag'), () => onPick(null))}
+      {shown.map((tg) => (
+        <div key={tg}>{row(current === tg, <span className="inline-flex items-center gap-1"><Hash size={12} className="text-muted" />{tg}</span>, () => onPick(current === tg ? null : tg))}</div>
+      ))}
+      {needle && !shown.length && <p className="px-3 py-2.5 text-[13.5px] text-muted">{t('filter.noTags')}</p>}
+    </>
   )
 }

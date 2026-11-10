@@ -122,6 +122,8 @@ export const en = {
   'filter.finished': 'Finished',
   'filter.tags': 'Tags',
   'filter.anyTag': 'Any tag',
+  'filter.searchTags': 'Search tags',
+  'filter.noTags': 'No tags match',
   'filter.none': 'Nothing here with this filter.',
   'filter.showAll': 'Show all',
   'finished.mark': 'Mark finished',
