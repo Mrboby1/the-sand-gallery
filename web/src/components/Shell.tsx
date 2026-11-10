@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Moon, RefreshCw, Search, Settings as SettingsIcon, Sun, WifiOff, X } from 'lucide-react'
+import { ArrowLeft, Moon, RefreshCw, Search, Settings as SettingsIcon, Sun, WifiOff, X, CalendarCheck } from 'lucide-react'
 import { useState } from 'react'
 import { setTheme } from '../lib/theme'
 import { useApp, checkHealth, dismissToast, wakeUp } from '../store/app'
@@ -49,6 +49,7 @@ export function HeaderActions() {
   return (
     <>
       <ThemeToggle />
+      <Link to="/day" aria-label={t('nav.day')} title={t('nav.day')} className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-surface-2"><CalendarCheck size={20} /></Link>
       <Link to="/search" aria-label={t('nav.search')} className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-surface-2"><Search size={20} /></Link>
       <Link to="/settings" aria-label={t('nav.settings')} className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-surface-2"><SettingsIcon size={20} /></Link>
     </>

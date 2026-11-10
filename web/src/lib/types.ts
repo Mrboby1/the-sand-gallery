@@ -142,9 +142,21 @@ export interface Settings {
   updated_at?: ISODate
 }
 
+/** Daily review: "How did the day go", one per (local) date. */
+export interface DayNote {
+  id: UUID
+  owner_id?: UUID
+  /** YYYY-MM-DD, local date */
+  day: string
+  body: string
+  created_at: ISODate
+  updated_at: ISODate
+}
+
 export interface Snapshot {
   items: Item[]
   notes: Note[]
+  day_notes: DayNote[]
   statuses: Status[]
   sessions: Session[]
   media: Media[]
@@ -154,11 +166,12 @@ export interface Snapshot {
   settings: Settings
 }
 
-export type TableName = 'items' | 'notes' | 'statuses' | 'sessions' | 'media' | 'cost_lines' | 'templates' | 'share_links'
+export type TableName = 'items' | 'notes' | 'statuses' | 'sessions' | 'media' | 'cost_lines' | 'templates' | 'share_links' | 'day_notes'
 
 export interface TableRow {
   items: Item
   notes: Note
+  day_notes: DayNote
   statuses: Status
   sessions: Session
   media: Media

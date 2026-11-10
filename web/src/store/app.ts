@@ -3,7 +3,7 @@ import { backend } from '../lib/backend'
 import type { Access } from '../lib/backend/types'
 import type { HealthState } from '../lib/backend/types'
 import { isNetworkError } from '../lib/backend/supabase'
-import type {
+import type { DayNote,
   AppUser, CostLine, Item, Media, Note, Session, Settings, ShareLink, Snapshot, Status, TableName, Template, TemplateNode,
 } from '../lib/types'
 import { DEFAULT_SETTINGS } from '../lib/types'
@@ -25,7 +25,7 @@ export interface PendingUpload {
 
 const emptySnap = (): Snapshot => ({
   items: [],
-  notes: [], statuses: [], sessions: [], media: [], cost_lines: [], templates: [], share_links: [], settings: { ...DEFAULT_SETTINGS },
+  notes: [], day_notes: [], statuses: [], sessions: [], media: [], cost_lines: [], templates: [], share_links: [], settings: { ...DEFAULT_SETTINGS },
 })
 
 interface State {
@@ -109,6 +109,7 @@ function readCache(): { user: AppUser; data: Snapshot } | null {
     if (!raw) return null
     const c = JSON.parse(raw) as { user: AppUser; data: Snapshot }
     c.data.notes ??= [] // caches from before notes were a list
+    c.data.day_notes ??= [] // caches from before the Daily review
     return c
   } catch { return null }
 }
@@ -752,6 +753,19 @@ export async function ensureUrls(keys: string[]) {
 }
 
 // ---------------------------------------------------------------- notes
+/** Daily review note for a local date (YYYY-MM-DD): updates the day's note or creates it. */
+export function setDayNote(day: string, body: string) {
+  const ts = now()
+  const existing = get().data.day_notes.find((n) => n.day === day)
+  if (existing) {
+    if (existing.body === body) return
+    return commit((s) => ({ ...s, day_notes: s.day_notes.map((n) => (n.id === existing.id ? { ...n, body, updated_at: ts } : n)) }), [{ k: 'update', table: 'day_notes', id: existing.id, patch: { body } }])
+  }
+  if (!body.trim()) return
+  const row: DayNote = { id: uuid(), day, body, created_at: ts, updated_at: ts }
+  return commit((s) => ({ ...s, day_notes: [...s.day_notes, row] }), [{ k: 'insert', table: 'day_notes', rows: [row] }])
+}
+
 export function addNote(itemId: string, body = ''): string {
   const ts = now()
   const row: Note = { id: uuid(), item_id: itemId, body, pinned: false, created_at: ts, updated_at: ts }

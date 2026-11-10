@@ -37,7 +37,7 @@ export interface Manifest {
 
 export interface Progress { step: 'data' | 'media' | 'pack' | 'rows' | 'upload' | 'done'; done: number; total: number }
 
-const TABLES: TableName[] = ['statuses', 'templates', 'items', 'media', 'notes', 'sessions', 'cost_lines', 'share_links']
+const TABLES: TableName[] = ['statuses', 'templates', 'items', 'media', 'notes', 'sessions', 'cost_lines', 'share_links', 'day_notes']
 
 /** A random id for this browser/device (part of the offline origin key). */
 export function deviceId(): string {
@@ -258,6 +258,9 @@ export async function importInto(target: Backend, arc: Archive, onProgress: (p: 
   // a timer that was running when the file was made stops at the moment of the export
   await insert('sessions', keep('sessions', data.sessions).map((s) => (s.ended_at ? s : { ...s, ended_at: manifest.exported_at > s.started_at ? manifest.exported_at : s.started_at })))
   await insert('cost_lines', keep('cost_lines', data.cost_lines))
+  // daily review notes: one per date; a date that already has a note keeps it
+  const haveDays = new Set(have.day_notes.map((n) => n.day))
+  await insert('day_notes', (data.day_notes ?? []).filter((n) => !haveDays.has(n.day) || (skipped++, false)))
   // share links are not imported: they are public links of the place the data came from
 
   if (wasEmpty && data.settings) await target.saveSettings({ ...have.settings, ...noOwner(data.settings), owner_id: have.settings.owner_id })

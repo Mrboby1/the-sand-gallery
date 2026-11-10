@@ -24,6 +24,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
     { id: 'fullscreen', keywords: 'fullscreen hourglass grains of sand count' },
     { id: 'sandfill', keywords: 'sand fill empty new project pile grows' },
     { id: 'freeze', keywords: 'paused frozen freeze ice blue frost' },
+    { id: 'daily', keywords: 'daily review today day summary journal note how did the day go worked' },
     { id: 'timelog', keywords: 'time log edit session add manual weekly total' },
     { id: 'addTime', keywords: 'add time log manual session plus button worked' },
     { id: 'period', keywords: 'today this week this month all time worked summary total period day' },

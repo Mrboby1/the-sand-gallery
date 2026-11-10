@@ -18,6 +18,7 @@ function emptyDB(): DB {
   return {
     items: [],
     notes: [],
+    day_notes: [],
     statuses: DEFAULT_STATUSES.map((s, i) => ({ id: crypto.randomUUID(), name: s.name, color: s.color, is_finished: s.is_finished, sort_order: i, created_at: now })),
     sessions: [],
     media: [],
@@ -33,6 +34,7 @@ function read(): DB {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const db = JSON.parse(raw) as DB
+      db.day_notes ??= [] // stores from before the Daily review
       if (!db.notes) {
         // same migration as the cloud: the old single note of each item becomes its first note
         db.notes = db.items.filter((i) => i.notes.trim()).map((i) => ({ id: crypto.randomUUID(), item_id: i.id, body: i.notes, pinned: false, created_at: i.created_at, updated_at: i.updated_at }))
@@ -128,8 +130,17 @@ export class LocalBackend implements Backend {
     const list = db[table] as unknown as (TableRow[T] & { id: string })[]
     const i = list.findIndex((r) => r.id === id)
     if (i < 0) throw new Error(`Not found: ${table}/${id}`)
+    const before = list[i] as unknown as { status_id?: string | null; finished_at?: string | null }
     list[i] = { ...list[i], ...patch }
-    if (table === 'items') (list[i] as unknown as { updated_at: string }).updated_at = new Date().toISOString()
+    if (table === 'items') {
+      const it = list[i] as unknown as { updated_at: string; status_id?: string | null; finished_at?: string | null }
+      it.updated_at = new Date().toISOString()
+      // like the database trigger (0003): finished_at is stamped when an item gets a finished status, cleared when it leaves it
+      if ('status_id' in (patch as object)) {
+        const fin = (sid?: string | null) => !!sid && !!db.statuses.find((x) => x.id === sid)?.is_finished
+        it.finished_at = fin(it.status_id) ? (fin(before.status_id) ? before.finished_at ?? it.updated_at : it.updated_at) : null
+      }
+    }
     write(db)
   }
   async remove(table: TableName, ids: string[]) {

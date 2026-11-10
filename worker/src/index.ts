@@ -44,7 +44,7 @@ export interface Env {
 }
 
 export const PREFIX = 'sand-gallery/'
-const TABLES = ['statuses', 'items', 'notes', 'sessions', 'media', 'cost_lines', 'templates', 'share_links', 'settings']
+const TABLES = ['statuses', 'items', 'notes', 'day_notes', 'sessions', 'media', 'cost_lines', 'templates', 'share_links', 'settings']
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // ------------------------------------------------------------------ helpers

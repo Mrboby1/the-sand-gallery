@@ -5,6 +5,7 @@ import { Home } from './pages/Home'
 import { ItemPage } from './pages/ItemPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { DayPage } from './pages/DayPage'
 import { FeaturesPage } from './pages/FeaturesPage'
 import { SharePage } from './pages/SharePage'
 import { Login, NotAllowed } from './pages/Login'
@@ -54,6 +55,7 @@ function Gate() {
         <Route path="/" element={<Home />} />
         <Route path="/i/:id" element={<ItemPage />} />
         <Route path="/search" element={<SearchPage />} />
+        <Route path="/day" element={<DayPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/features" element={<FeaturesPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

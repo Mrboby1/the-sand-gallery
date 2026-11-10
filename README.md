@@ -137,6 +137,14 @@ A paused hourglass blends its outline, rims and sand toward `--freeze` (`freeze_
 transitions, the canvas grains blend over ~0.8 s, and a static frost layer (tint, frosted edges, crystals) fades in.
 The timer card and time text take an icy tint too. Small CSS glyphs get a lighter tint. Nothing animates while frozen.
 
+### Daily review
+`/day` (calendar button in the header; `?d=YYYY-MM-DD`, never in the future): time worked that local day (sessions split
+at midnight, a running timer up to now), time per project (sessions rolled up to their top-level / in-folder
+project, bars, tap to open), photos/videos added that day, projects started (`created_at`) and finished
+(`finished_at`), and a "How did the day go" note in `day_notes` (migration 0016: one per owner + date, owner RLS +
+allow-list, realtime; autosaved; in offline mode, export/import and the nightly backup). The offline backend now
+stamps `finished_at` like the database trigger does.
+
 ### Add time log
 The + menu has "Add time log": inside a project/subtask it opens the Time log's session sheet (start, end) for it; on
 home or in a folder it first asks which project (`ProjectPickerSheet`, projects in scope, active first, searchable).
