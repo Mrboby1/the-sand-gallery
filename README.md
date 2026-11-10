@@ -39,6 +39,10 @@ session and opens a new one, atomically, idempotent per session id; `at` = when 
 `item_totals` gives recursive totals in SQL; the app computes the same client-side so parents tick live.
 
 ### Media (Backblaze B2, SHARED account)
+Adding: the normal picker (`accept=image/*,video/*`, multiple) everywhere, plus on touch devices a "Take photo" option
+(empty Photos area, a camera tile in the grid, and + inside a project or folder) that opens the back camera
+(`accept=image/*` `capture=environment`). Both go through `uploadFiles`: thumbnail, upload queue, Worker/B2, same target.
+
 Bucket `sand-gallery-ypghnj`. **Every key starts with `sand-gallery/`** and the B2 key is restricted to that prefix:
 - originals `sand-gallery/media/<user>/<item>/<uuid>.<ext>`
 - thumbnails `sand-gallery/thumbs/<user>/<item>/<uuid>.webp` (made in the browser: resized photo / video poster frame)

@@ -11,6 +11,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
     { id: 'subtasks', keywords: 'subtask nested inside child' },
     { id: 'templates', keywords: 'template save as template new from template' },
     { id: 'folders', keywords: 'folder folders group organise organize gallery new folder move' },
+    { id: 'camera', keywords: 'camera take photo picture snap phone capture' },
     { id: 'longpress', keywords: 'long press menu right click rename move duplicate delete undo actions' },
     { id: 'status', keywords: 'status pill bar idea progress done sold board' },
     { id: 'finishedTab', keywords: 'filter finished unfinished all done tag tags separate archive reopen mark finished' },

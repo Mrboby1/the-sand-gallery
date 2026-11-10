@@ -20,6 +20,9 @@ export function MediaSection({ item }: { item: Item }) {
   const [drag, setDrag] = useState(false)
   const picker = useRef<HTMLInputElement>(null)
   const pick = () => picker.current?.click()
+  // phones: the camera straight away (capture), next to the normal picker
+  const camera = useRef<HTMLInputElement>(null)
+  const shoot = () => camera.current?.click()
   // phones/tablets: no drag and drop there, so no dotted drop zone or "drop" wording
   const touch = useMediaQuery('(pointer: coarse)')
   const media = all
@@ -51,16 +54,27 @@ export function MediaSection({ item }: { item: Item }) {
       </div>
       {/* no capture attribute: phones offer both the camera and the gallery */}
       <input ref={picker} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { void uploadFiles(item.id, [...(e.target.files ?? [])]); e.target.value = '' }} />
+      {/* "Take photo": opens the back camera; the photo takes the same upload path as any other */}
+      <input ref={camera} type="file" accept="image/*" capture="environment" hidden data-testid="camera-input" onChange={(e) => { void uploadFiles(item.id, [...(e.target.files ?? [])]); e.target.value = '' }} />
 
       {shown.length === 0 && uploads.length === 0 ? (
         touch ? (
-          <button onClick={pick} className="flex w-full items-center gap-4 rounded-3xl bg-surface-2 px-5 py-5 text-left transition active:scale-[0.99]">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-on-primary"><Camera size={22} /></span>
-            <span>
-              <span className="block font-medium">{t('gallery.addMedia')}</span>
-              <span className="block text-[13px] text-muted">{t('gallery.addMediaHint')}</span>
-            </span>
-          </button>
+          <div className="flex flex-col gap-2">
+            <button onClick={shoot} className="flex w-full items-center gap-4 rounded-3xl bg-surface-2 px-5 py-4 text-left transition active:scale-[0.99]">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-on-primary"><Camera size={22} /></span>
+              <span>
+                <span className="block font-medium">{t('gallery.takePhoto')}</span>
+                <span className="block text-[13px] text-muted">{t('gallery.takePhotoHint')}</span>
+              </span>
+            </button>
+            <button onClick={pick} className="flex w-full items-center gap-4 rounded-3xl bg-surface-2 px-5 py-4 text-left transition active:scale-[0.99]">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent-soft text-accent-strong"><ImagePlus size={22} /></span>
+              <span>
+                <span className="block font-medium">{t('gallery.choose')}</span>
+                <span className="block text-[13px] text-muted">{t('gallery.chooseHint')}</span>
+              </span>
+            </button>
+          </div>
         ) : (
           <button onClick={pick} className="flex w-full flex-col items-center justify-center rounded-3xl border-2 border-dashed border-line px-6 py-10 text-center text-sm text-muted transition hover:border-accent hover:bg-accent-soft/40 hover:text-ink">
             <ImagePlus size={28} strokeWidth={1.4} className="mb-2 text-accent" />
@@ -114,6 +128,12 @@ export function MediaSection({ item }: { item: Item }) {
               )}
             </div>
           ))}
+          {touch && (
+            <button onClick={shoot} aria-label={t('gallery.takePhoto')} className="flex aspect-square flex-col items-center justify-center gap-1 bg-surface-2 text-muted transition hover:bg-accent-soft hover:text-ink">
+              <Camera size={22} />
+              <span className="text-[11px] font-medium">{t('gallery.camera')}</span>
+            </button>
+          )}
           <button onClick={pick} aria-label={t('gallery.addMedia')} title={t('gallery.addMedia')} className="flex aspect-square flex-col items-center justify-center gap-1 bg-surface-2 text-muted transition hover:bg-accent-soft hover:text-ink">
             <Plus size={24} />
             <span className="text-[11px] font-medium">{t('gallery.add')}</span>

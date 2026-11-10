@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FolderPlus, ImagePlus, ListPlus, MoreHorizontal, Plus, SquarePlus, StickyNote } from 'lucide-react'
+import { Camera, FolderPlus, ImagePlus, ListPlus, MoreHorizontal, Plus, SquarePlus, StickyNote } from 'lucide-react'
+import { useMediaQuery } from '../lib/hooks'
 import { useApp, addNote, createItem, toast, uploadFiles } from '../store/app'
 import { NewItemSheet } from './ItemBits'
 import { Button, Sheet, cx } from './ui'
@@ -19,6 +20,7 @@ export function AddMenu({ parentId, parentTitle, parentKind = parentId ? 'item' 
   const [sheet, setSheet] = useState<null | 'menu' | 'item' | 'folder' | 'template'>(null)
   const nav = useNavigate()
   const file = useRef<HTMLInputElement>(null)
+  const camera = useRef<HTMLInputElement>(null)
   return (
     <>
       {variant !== 'fab' && <div className="hidden sm:block">
@@ -42,6 +44,8 @@ export function AddMenu({ parentId, parentTitle, parentKind = parentId ? 'item' 
         hidden
         onChange={(e) => { if (parentId) void uploadFiles(parentId, [...(e.target.files ?? [])]); e.target.value = '' }}
       />
+      {/* "Take photo" (phones): the back camera, same upload path and target as the picker */}
+      <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { if (parentId) void uploadFiles(parentId, [...(e.target.files ?? [])]); e.target.value = '' }} />
       <AddSheet
         open={sheet === 'menu'}
         onClose={() => setSheet(null)}
@@ -51,6 +55,7 @@ export function AddMenu({ parentId, parentTitle, parentKind = parentId ? 'item' 
         canFolder={!parentId || parentKind === 'folder'}
         onPick={(what) => {
           if (what === 'upload') { setSheet(null); file.current?.click() }
+          else if (what === 'camera') { setSheet(null); camera.current?.click() }
           else if (what === 'note' && parentId) { setSheet(null); const id = addNote(parentId); nav(`/i/${parentId}?tab=notes&note=${id}`) }
           else if (what !== 'note') setSheet(what)
         }}
@@ -63,8 +68,9 @@ export function AddMenu({ parentId, parentTitle, parentKind = parentId ? 'item' 
 }
 
 function AddSheet({ open, onClose, onPick, canUpload, parentTitle, inFolder, canFolder }: {
-  open: boolean; onClose: () => void; onPick: (w: 'item' | 'folder' | 'template' | 'upload' | 'note') => void; canUpload: boolean; parentTitle?: string; inFolder: boolean; canFolder: boolean
+  open: boolean; onClose: () => void; onPick: (w: 'item' | 'folder' | 'template' | 'upload' | 'camera' | 'note') => void; canUpload: boolean; parentTitle?: string; inFolder: boolean; canFolder: boolean
 }) {
+  const touch = useMediaQuery('(pointer: coarse)')
   const templates = useApp((s) => s.data.templates)
   /** One row; `more` adds a "⋯" button on the right (e.g. "from a template"). */
   const Opt = ({ icon, title, hint, onClick, more }: { icon: React.ReactNode; title: string; hint: string; onClick: () => void; more?: { label: string; run: () => void } }) => (
@@ -93,6 +99,7 @@ function AddSheet({ open, onClose, onPick, canUpload, parentTitle, inFolder, can
           : <Opt icon={<SquarePlus size={21} />} title={t('add.project')} hint={inFolder ? t('add.projectInFolder', { title: parentTitle ?? '' }) : t('add.projectHint')} onClick={() => onPick('item')} more={fromTemplate} />}
         {canFolder && <Opt icon={<FolderPlus size={21} />} title={t('add.folder')} hint={inFolder ? t('add.folderInFolder', { title: parentTitle ?? '' }) : t('add.folderHint')} onClick={() => onPick('folder')} />}
         {canUpload && <Opt icon={<StickyNote size={21} />} title={t('add.note')} hint={t('add.noteHint', { title: parentTitle ?? '' })} onClick={() => onPick('note')} />}
+        {canUpload && touch && <Opt icon={<Camera size={21} />} title={t('add.camera')} hint={t('add.cameraHint', { title: parentTitle ?? '' })} onClick={() => onPick('camera')} />}
         {canUpload && <Opt icon={<ImagePlus size={21} />} title={t('add.upload')} hint={t('add.uploadHint', { title: parentTitle ?? '' })} onClick={() => onPick('upload')} />}
       </div>
     </Sheet>
