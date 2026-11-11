@@ -1,6 +1,7 @@
 // Persisted queue of photo/video uploads (IndexedDB), so files picked offline survive closing the app
 // and upload automatically when the connection returns.
 import type { MediaKind } from './types'
+import type { MultipartState } from './backend/types'
 
 export interface UploadJob {
   id: string // becomes the media row id
@@ -66,6 +67,27 @@ export function askPersist() {
   if (persistAsked) return
   persistAsked = true
   void navigator.storage?.persist?.().catch(() => false)
+}
+
+/**
+ * Small per-job progress (hash, multipart parts, stored keys) lives in localStorage, NOT in the IndexedDB job:
+ * re-putting a job would copy its (possibly 1 GB) video again on every finished part.
+ */
+export interface JobMeta {
+  sha256?: string | null
+  mp?: MultipartState
+  object_key?: string
+  thumb_key?: string | null
+}
+const metaKey = (id: string) => `sg.upmeta.${id}`
+export function readMeta(id: string): JobMeta {
+  try { return JSON.parse(localStorage.getItem(metaKey(id)) ?? '{}') as JobMeta } catch { return {} }
+}
+export function writeMeta(id: string, patch: Partial<JobMeta>) {
+  try { localStorage.setItem(metaKey(id), JSON.stringify({ ...readMeta(id), ...patch })) } catch { /* full or blocked: only resuming is lost */ }
+}
+export function dropMeta(id: string) {
+  try { localStorage.removeItem(metaKey(id)) } catch { /* ignore */ }
 }
 
 export const mb = (n: number) => `${Math.max(0.1, Math.round((n / 1048576) * 10) / 10)} MB`

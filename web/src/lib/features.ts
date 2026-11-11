@@ -12,6 +12,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
     { id: 'templates', keywords: 'template save as template new from template' },
     { id: 'folders', keywords: 'folder folders group organise organize gallery new folder move' },
     { id: 'camera', keywords: 'camera take photo picture snap phone capture save gallery downloads' },
+    { id: 'video', keywords: 'record video film clip camera recorder movie phone capture save gallery camera roll backup' },
     { id: 'download', keywords: 'download save original photo video file' },
     { id: 'longpress', keywords: 'long press menu right click rename move duplicate delete undo actions' },
     { id: 'status', keywords: 'status pill bar idea progress done sold board' },

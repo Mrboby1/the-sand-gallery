@@ -56,7 +56,8 @@ function videoThumb(file: File): Promise<{ blob: Blob; ext: string; type: string
       try {
         const c = drawScaled(v, v.videoWidth, v.videoHeight)
         const b = await canvasToBlob(c)
-        done({ ...b, width: v.videoWidth, height: v.videoHeight, duration: v.duration })
+        // recordings made in the browser (WebM) often report an Infinite duration
+        done({ ...b, width: v.videoWidth, height: v.videoHeight, duration: Number.isFinite(v.duration) ? v.duration : null as unknown as number })
       } catch {
         done(null)
       }

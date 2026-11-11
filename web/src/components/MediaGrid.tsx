@@ -5,6 +5,7 @@ import type { Item, Media } from '../lib/types'
 import { useApp, deleteMedia, dismissUpload, pendingAsMedia, retryUpload, updateItem, updateMedia, uploadFiles } from '../store/app'
 import { cameraFile, downloadMedia, downloadName, saveCameraPhoto } from '../lib/download'
 import { PhotoSourceSheet } from './PhotoSource'
+import { useRecordVideo } from './VideoRecorder'
 import { useMediaQuery, useMediaUrl } from '../lib/hooks'
 import { Thumb } from './Tile'
 import { IconButton, confirmDialog, cx } from './ui'
@@ -25,6 +26,8 @@ export function MediaSection({ item }: { item: Item }) {
   // phones: the camera straight away (capture), next to the normal picker
   const camera = useRef<HTMLInputElement>(null)
   const shoot = () => camera.current?.click()
+  // "Record video": the in-app recorder (nothing lands in the phone's camera roll) or the camera app
+  const record = useRecordVideo(item.id)
   const [source, setSource] = useState(false)
   /** phones: camera or gallery? computers: the picker */
   const add = () => (touch ? setSource(true) : pick())
@@ -130,7 +133,8 @@ export function MediaSection({ item }: { item: Item }) {
           </button>
         </div>
       )}
-      <PhotoSourceSheet open={source} onClose={() => setSource(false)} onCamera={shoot} onPick={pick} />
+      <PhotoSourceSheet open={source} onClose={() => setSource(false)} onCamera={shoot} onVideo={record.start} onPick={pick} />
+      {record.ui}
       {drag && <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-3xl text-lg font-medium text-accent-strong">{t('gallery.dropHere')}</div>}
       {open !== null && shown[open] && (
         <Lightbox list={shown} index={open} item={item} onIndex={(i) => { setNoteOpen(false); setOpen(i) }} onClose={() => setOpen(null)} noteOpen={noteOpen} />

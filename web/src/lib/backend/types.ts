@@ -19,6 +19,25 @@ export interface UploadResult {
 }
 
 /**
+ * Progress of a big (multipart) upload, kept with the queued job so a cut connection or a closed app resumes
+ * from the last finished part instead of starting over.
+ */
+export interface MultipartState {
+  key: string
+  uploadId: string
+  thumbKey: string | null
+  partSize: number
+  /** finished parts: part number -> ETag */
+  done: Record<number, string>
+  thumbDone?: boolean
+}
+export interface UploadResume {
+  state?: MultipartState
+  /** called after every finished part (persist it) */
+  save: (s: MultipartState | undefined) => void
+}
+
+/**
  * Everything the UI needs from the outside world. Two implementations:
  *  - LocalBackend: localStorage + IndexedDB, for development and offline demos.
  *  - SupabaseBackend: Supabase (DB + Auth) plus the Cloudflare Worker (B2 media, wake-up, share pages).
@@ -51,7 +70,9 @@ export interface Backend {
   subscribe(onRemoteChange: () => void): () => void
 
   // media
-  uploadMedia(itemId: string, parts: UploadPart[], onProgress?: (fraction: number) => void): Promise<UploadResult>
+  uploadMedia(itemId: string, parts: UploadPart[], onProgress?: (fraction: number) => void, resume?: UploadResume): Promise<UploadResult>
+  /** Cancels an unfinished multipart upload (its parts would otherwise use storage). */
+  abortUpload?(state: MultipartState): Promise<void>
   /** Resolves storage keys to displayable URLs. */
   mediaUrls(keys: string[]): Promise<Record<string, string>>
   deleteMediaObjects(keys: string[]): Promise<void>

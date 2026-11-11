@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js'
-import type { Access, AllowedEmail, Backend, HealthState, UploadPart, UploadResult } from './types'
+import type { Access, AllowedEmail, Backend, HealthState, MultipartState, UploadPart, UploadResult, UploadResume } from './types'
 import type { AppUser, Session, Settings, SharedGallery, Snapshot, TableName, TableRow } from '../types'
 import { DEFAULT_SETTINGS } from '../types'
 
@@ -175,7 +175,11 @@ export class SupabaseBackend implements Backend {
     }
   }
 
-  async uploadMedia(itemId: string, parts: UploadPart[], onProgress?: (f: number) => void): Promise<UploadResult> {
+  async uploadMedia(itemId: string, parts: UploadPart[], onProgress?: (f: number) => void, resume?: UploadResume): Promise<UploadResult> {
+    const original = parts.find((p) => p.role === 'original')
+    if (original && (resume?.state || original.blob.size > MULTIPART_MIN)) {
+      return this.uploadMultipart(itemId, original, parts.find((p) => p.role === 'thumb'), onProgress, resume)
+    }
     const { parts: signed } = await this.api<{ parts: { role: string; key: string; url: string }[] }>('/api/media/upload', {
       method: 'POST',
       body: JSON.stringify({ itemId, parts: parts.map((p) => ({ role: p.role, contentType: p.contentType, ext: p.ext })) }),
@@ -205,6 +209,100 @@ export class SupabaseBackend implements Backend {
     }
     onProgress?.(1)
     return result
+  }
+
+  /**
+   * Big files (long videos): a B2 multipart upload. The Worker starts and finishes it; the parts (8 MB) go straight
+   * to B2, three at a time, each retried on its own. Every finished part is reported through `resume.save`, so a
+   * cut connection or a closed app carries on from there.
+   */
+  private async uploadMultipart(itemId: string, original: UploadPart, thumb: UploadPart | undefined, onProgress?: (f: number) => void, resume?: UploadResume): Promise<UploadResult> {
+    const size = original.blob.size
+    let st = resume?.state
+    if (!st) {
+      const { parts: started } = await this.api<{ parts: { role: string; key: string; url?: string; uploadId?: string }[] }>('/api/media/upload', {
+        method: 'POST',
+        body: JSON.stringify({
+          itemId,
+          parts: [
+            { role: 'original', contentType: original.contentType, ext: original.ext, multipart: true },
+            ...(thumb ? [{ role: 'thumb', contentType: thumb.contentType, ext: thumb.ext }] : []),
+          ],
+        }),
+      })
+      const o = started.find((x) => x.role === 'original')
+      if (!o?.uploadId) throw new Error('Upload failed: could not start')
+      st = { key: o.key, uploadId: o.uploadId, thumbKey: started.find((x) => x.role === 'thumb')?.key ?? null, partSize: partSizeFor(size), done: {} }
+      resume?.save(st)
+    }
+    const state = st
+    const count = Math.max(1, Math.ceil(size / state.partSize))
+    const partLen = (n: number) => Math.min(size, n * state.partSize) - (n - 1) * state.partSize
+    const total = size + (thumb?.blob.size ?? 0) || 1
+    const inflight = new Map<number, number>()
+    const report = () => {
+      let b = 0
+      for (const k of Object.keys(state.done)) b += partLen(Number(k))
+      for (const v of inflight.values()) b += v
+      onProgress?.(Math.min(0.99, b / total))
+    }
+    report()
+    const todo: number[] = []
+    for (let n = 1; n <= count; n++) if (!state.done[n]) todo.push(n)
+    const urls = new Map<number, string>()
+    let signing: Promise<void> | null = null
+    const urlFor = async (n: number) => {
+      while (!urls.has(n)) {
+        if (!signing) {
+          const batch = todo.filter((x) => x >= n && !urls.has(x)).slice(0, 100)
+          signing = this.api<{ urls: Record<string, string> }>('/api/media/sign', { method: 'POST', body: JSON.stringify({ key: state.key, uploadId: state.uploadId, partNumbers: batch }) })
+            .then(({ urls: u }) => { for (const [k, v] of Object.entries(u)) urls.set(Number(k), v) })
+            .finally(() => { signing = null })
+        }
+        await signing
+      }
+      return urls.get(n)!
+    }
+    let next = 0
+    const lane = async () => {
+      while (next < todo.length) {
+        const n = todo[next++]
+        const from = (n - 1) * state.partSize
+        const blob = original.blob.slice(from, from + partLen(n))
+        const etag = await withRetry(async () => {
+          inflight.set(n, 0)
+          return putWithProgress(await urlFor(n), blob, null, (loaded) => { inflight.set(n, loaded); report() })
+        }, 5)
+        inflight.delete(n)
+        if (!etag) throw new Error('Upload failed: no ETag from storage')
+        state.done[n] = etag
+        resume?.save(state)
+        report()
+      }
+    }
+    await Promise.all([lane(), lane(), lane()])
+    await this.api('/api/media/multipart/complete', {
+      method: 'POST',
+      body: JSON.stringify({ key: state.key, uploadId: state.uploadId, parts: Object.entries(state.done).map(([n, etag]) => ({ partNumber: Number(n), etag })) }),
+    })
+    const result: UploadResult = { object_key: state.key, thumb_key: null }
+    if (thumb && state.thumbKey) {
+      try {
+        const { url } = await this.api<{ url: string }>('/api/media/sign', { method: 'POST', body: JSON.stringify({ key: state.thumbKey }) })
+        await withRetry(() => putWithProgress(url, thumb.blob, thumb.contentType, () => {}))
+        result.thumb_key = state.thumbKey
+      } catch (e) {
+        console.warn('thumbnail upload failed, continuing without it', e)
+        await this.deleteMediaObjects([state.thumbKey]).catch(() => {})
+      }
+    }
+    onProgress?.(1)
+    return result
+  }
+
+  async abortUpload(state: MultipartState) {
+    await this.api('/api/media/multipart/abort', { method: 'POST', body: JSON.stringify({ key: state.key, uploadId: state.uploadId }) }).catch(() => {})
+    if (state.thumbKey) await this.deleteMediaObjects([state.thumbKey]).catch(() => {})
   }
 
   async mediaUrls(keys: string[]) {
@@ -288,6 +386,13 @@ export class SupabaseBackend implements Backend {
 class RetryableError extends Error {}
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+/** Files above this go up as a multipart upload (B2 parts: 5 MB minimum, 10,000 at most). */
+export const MULTIPART_MIN = 32 * 1048576
+function partSizeFor(size: number): number {
+  const MB = 1048576
+  return Math.max(8 * MB, Math.ceil(size / 9000 / MB) * MB)
+}
+
 /** True for 'could not reach the server' errors (offline, DNS, CORS-less network failure). */
 export function isNetworkError(e: unknown): boolean {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
@@ -318,13 +423,14 @@ function strip<T extends object>(row: T): T {
   return copy as T
 }
 
-function putWithProgress(url: string, blob: Blob, contentType: string, onLoaded: (n: number) => void): Promise<void> {
+/** PUT with upload progress; resolves with the ETag B2 returns (needed for multipart parts). */
+function putWithProgress(url: string, blob: Blob, contentType: string | null, onLoaded: (n: number) => void): Promise<string> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('PUT', url)
-    xhr.setRequestHeader('Content-Type', contentType)
+    if (contentType) xhr.setRequestHeader('Content-Type', contentType)
     xhr.upload.onprogress = (e) => onLoaded(e.loaded)
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed: ${xhr.status}`)))
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve(xhr.getResponseHeader('ETag') ?? '') : reject(new Error(`Upload failed: ${xhr.status}`)))
     xhr.onerror = () => reject(new Error('Upload failed (network)'))
     xhr.send(blob)
   })

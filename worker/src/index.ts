@@ -4,6 +4,12 @@
  *  POST /api/media/upload   presigned PUT URLs for a new photo/video (+ thumbnail)   [auth]
  *  POST /api/media/urls     presigned GET URLs for the caller's own keys              [auth]
  *  POST /api/media/delete   deletes the caller's own objects                          [auth]
+ *  POST /api/media/sign     fresh PUT URL for an own key, or part URLs of a multipart upload [auth]
+ *  POST /api/media/multipart/complete | abort   finish / cancel a multipart upload (big videos) [auth]
+ *  POST /api/dedupe/check   which of these SHA-256 hashes / (name, size) pairs are stored? For the Sus Gallery
+ *                           phone backup; Authorization: Bearer <DEDUPE_SECRET> (Worker secret), no user token
+ *  POST /api/dedupe/list    read-only page of Sand media (+ signed /f/ thumb/original URLs) for the Sus Gallery's
+ *                           "Sand Gallery" folder; same secret. Both: C:\Users\gabib\family-gallery\infra\SAND-DEDUPE.md
  *  GET  /api/share/:token   public read-only gallery for a share link (presigned media)
  *  GET  /api/health         { state: 'up' | 'asleep' | 'waking' | 'unreachable' }
  *  POST /api/wake           restores a paused Supabase project (Management API). Needs a Supabase JWT
@@ -41,6 +47,7 @@ export interface Env {
   VAPID_PUBLIC: string
   VAPID_PRIVATE_JWK: string // secret
   HOOK_SECRET: string // secret, shared with the database hook
+  DEDUPE_SECRET?: string // secret, shared with the Sus Gallery (POST /api/dedupe/check)
 }
 
 export const PREFIX = 'sand-gallery/'
@@ -107,9 +114,10 @@ function amzDate(d: Date) {
  * Presigns a URL. GETs are signed with a date fixed to the start of the UTC day (valid 2 days), so the
  * same object gets the same URL all day long and the browser/service-worker cache can hit.
  */
-export async function presign(env: Env, method: 'GET' | 'PUT', key: string, expiresSec?: number, window: 'day' | 'hour' = 'day'): Promise<string> {
+export async function presign(env: Env, method: 'GET' | 'PUT', key: string, expiresSec?: number, window: 'day' | 'hour' = 'day', query: Record<string, string> = {}): Promise<string> {
   if (!safeKey(key)) throw new HttpError(400, 'bad key')
   const url = objectUrl(env, key)
+  for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v)
   let datetime: string
   if (method === 'GET') {
     const start = new Date()
@@ -297,7 +305,7 @@ function service(env: Env, path: string, init: RequestInit = {}) {
 // ------------------------------------------------------------------ routes
 async function mediaUpload(env: Env, req: Request) {
   const user = await requireUser(env, req)
-  const body = (await req.json()) as { itemId?: string; parts?: { role: string; contentType: string; ext: string }[] }
+  const body = (await req.json()) as { itemId?: string; parts?: { role: string; contentType: string; ext: string; multipart?: boolean }[] }
   if (!body.itemId || !UUID.test(body.itemId)) throw new HttpError(400, 'bad itemId')
   if (!Array.isArray(body.parts) || body.parts.length < 1 || body.parts.length > 2) throw new HttpError(400, 'bad parts')
   // item must exist and belong to the caller (RLS)
@@ -310,9 +318,194 @@ async function mediaUpload(env: Env, req: Request) {
     if (!/^(image|video)\/[\w.+-]+$/.test(String(p.contentType))) throw new HttpError(400, 'bad content type')
     const folder = p.role === 'thumb' ? 'thumbs' : 'media'
     const key = `${PREFIX}${folder}/${user.id}/${body.itemId}/${id}.${ext}`
+    // big originals (videos): a multipart upload; the browser then asks for part URLs (/api/media/sign)
+    if (p.multipart && p.role !== 'thumb') return { role: p.role, key, uploadId: await multipartStart(env, key, String(p.contentType)) }
     return { role: p.role, key, url: await presign(env, 'PUT', key) }
   }))
   return { parts }
+}
+
+// ------------------------------------------------------------------ multipart uploads (big videos)
+/*
+ * B2's S3 API: the Worker starts and completes the upload (POST, which the bucket CORS rule does not allow from
+ * browsers); the browser PUTs the parts straight to B2 with presigned URLs (PUT is allowed, ETag is exposed).
+ * Parts are >= 5 MB (except the last), at most 10,000. Each part is retried on its own, and a cut connection
+ * resumes from the last finished part.
+ */
+const PART_URL_TTL = 12 * 3600
+const UPLOAD_ID = /^[\w.~+/=-]{1,512}$/
+
+async function multipartStart(env: Env, key: string, contentType: string): Promise<string> {
+  if (!safeKey(key)) throw new HttpError(400, 'bad key')
+  const url = objectUrl(env, key)
+  url.searchParams.set('uploads', '')
+  const res = await b2(env).fetch(url.toString(), { method: 'POST', headers: { 'Content-Type': contentType } })
+  const text = await res.text()
+  const id = /<UploadId>([^<]+)<\/UploadId>/.exec(text)?.[1]
+  if (!res.ok || !id) { console.error('multipart start', res.status, text.slice(0, 300)); throw new HttpError(502, 'storage refused the upload') }
+  return id
+}
+
+function ownKeyAndUpload(userId: string, body: { key?: unknown; uploadId?: unknown }): { key: string; uploadId: string } {
+  if (typeof body.key !== 'string' || !ownsKey(userId, body.key)) throw new HttpError(403, 'not your key')
+  if (typeof body.uploadId !== 'string' || !UPLOAD_ID.test(body.uploadId)) throw new HttpError(400, 'bad uploadId')
+  return { key: body.key, uploadId: body.uploadId }
+}
+
+async function mediaSign(env: Env, req: Request) {
+  const user = await requireUser(env, req)
+  const body = (await req.json()) as { key?: unknown; uploadId?: unknown; partNumbers?: unknown[] }
+  if (body.uploadId === undefined) {
+    if (typeof body.key !== 'string' || !ownsKey(user.id, body.key)) throw new HttpError(403, 'not your key')
+    return { url: await presign(env, 'PUT', body.key) }
+  }
+  const { key, uploadId } = ownKeyAndUpload(user.id, body)
+  if (!Array.isArray(body.partNumbers) || body.partNumbers.length < 1 || body.partNumbers.length > 100) throw new HttpError(400, 'bad partNumbers')
+  const urls: Record<string, string> = {}
+  for (const n of body.partNumbers) {
+    if (!Number.isInteger(n) || (n as number) < 1 || (n as number) > 10000) throw new HttpError(400, 'bad part number')
+    urls[String(n)] = await presign(env, 'PUT', key, PART_URL_TTL, 'day', { partNumber: String(n), uploadId })
+  }
+  return { urls }
+}
+
+async function multipartComplete(env: Env, req: Request) {
+  const user = await requireUser(env, req)
+  const body = (await req.json()) as { key?: unknown; uploadId?: unknown; parts?: { partNumber: number; etag: string }[] }
+  const { key, uploadId } = ownKeyAndUpload(user.id, body)
+  if (!Array.isArray(body.parts) || body.parts.length < 1 || body.parts.length > 10000) throw new HttpError(400, 'bad parts')
+  const parts = [...body.parts].sort((a, b) => a.partNumber - b.partNumber)
+  let xml = '<CompleteMultipartUpload>'
+  for (const p of parts) {
+    if (!Number.isInteger(p.partNumber) || p.partNumber < 1 || p.partNumber > 10000) throw new HttpError(400, 'bad part number')
+    if (typeof p.etag !== 'string' || !/^"?[\w-]{1,128}"?$/.test(p.etag)) throw new HttpError(400, 'bad etag')
+    xml += `<Part><PartNumber>${p.partNumber}</PartNumber><ETag>${p.etag}</ETag></Part>`
+  }
+  xml += '</CompleteMultipartUpload>'
+  const url = objectUrl(env, key)
+  url.searchParams.set('uploadId', uploadId)
+  const res = await b2(env).fetch(url.toString(), { method: 'POST', body: xml, headers: { 'Content-Type': 'application/xml' } })
+  const text = await res.text()
+  if (!res.ok || text.includes('<Error>')) {
+    console.error('multipart complete', res.status, text.slice(0, 300))
+    throw new HttpError(res.status === 404 ? 404 : 502, 'storage could not finish the upload')
+  }
+  return { ok: true, key }
+}
+
+async function multipartAbort(env: Env, req: Request) {
+  const user = await requireUser(env, req)
+  const { key, uploadId } = ownKeyAndUpload(user.id, (await req.json()) as { key?: unknown; uploadId?: unknown })
+  const url = objectUrl(env, key)
+  url.searchParams.set('uploadId', uploadId)
+  const res = await b2(env).fetch(url.toString(), { method: 'DELETE' })
+  if (!res.ok && res.status !== 404) throw new HttpError(502, `storage abort ${res.status}`)
+  return { ok: true }
+}
+
+// ------------------------------------------------------------------ dedupe lookup (Sus Gallery)
+/*
+ * POST /api/dedupe/check, header Authorization: Bearer <DEDUPE_SECRET> (or X-Dedupe-Secret). Read-only.
+ * Contract: C:\Users\gabib\family-gallery\infra\SAND-DEDUPE.md (written by the Sus Gallery builder).
+ * body { hashes?: string[] (hex SHA-256, <= 1000), files?: { name, size }[] (<= 1000), email?: string }
+ * -> { hashes: [found hashes], files: [{ name (lowercased), size }], matches: [where each one is: DedupeMatch] }.
+ * 503 while the database is asleep: the caller should ask again later, never read it as "not found".
+ */
+async function requireDedupeSecret(env: Env, req: Request) {
+  if (!env.DEDUPE_SECRET) throw new HttpError(503, 'dedupe not configured')
+  const auth = req.headers.get('Authorization') ?? ''
+  const given = req.headers.get('X-Dedupe-Secret') ?? (auth.startsWith('Bearer ') ? auth.slice(7) : '')
+  // compare digests: constant time and equal length
+  if (!given || !sameString(await sha256(given), await sha256(env.DEDUPE_SECRET))) throw new HttpError(401, 'bad secret')
+}
+
+/** service-role RPC for the Sus endpoints; a sleeping database becomes 503 ("ask again later"). */
+async function susRpc<T>(env: Env, fn: string, args: unknown): Promise<T> {
+  let res: Response
+  try {
+    res = await service(env, `rpc/${fn}`, { method: 'POST', body: JSON.stringify(args) })
+  } catch { throw new HttpError(503, 'database unreachable, try later') }
+  if (!res.ok) {
+    console.error(fn, res.status, (await res.text().catch(() => '')).slice(0, 300))
+    if (res.status >= 500 && !(await dbAnswers(env).catch(() => false))) throw new HttpError(503, 'database asleep, try later')
+    throw new HttpError(502, 'database error')
+  }
+  return (await res.json()) as T
+}
+
+/*
+ * POST /api/dedupe/list (same secret). Read-only page of Sand media for the Sus Gallery's "Sand Gallery" folder:
+ * body { cursor?: string | null, limit?: number (<= 1000, default 500), email?: string }
+ * -> { projects: [{ id, name, path, kind }], items: [{ id, project_id, folder, name, kind, mime, size, sha256, taken_at,
+ *      created_at, width, height, duration, phase, thumb_url, url }], next: cursor | null }
+ * URLs are this Worker's signed /f/ links (valid 1-2 days, CORS *), never B2 links. thumb_url is the stored
+ * thumbnail only (never the original), null when there is none.
+ */
+interface SandListRaw {
+  projects: unknown[]
+  items: (Record<string, unknown> & { id: string; created_at: string; object_key: string; thumb_key: string | null })[]
+}
+async function dedupeList(env: Env, req: Request) {
+  await requireDedupeSecret(env, req)
+  let body: { cursor?: unknown; limit?: unknown; email?: unknown } = {}
+  try { body = ((await req.json()) ?? {}) as typeof body } catch { /* empty body = first page */ }
+  const limit = body.limit === undefined || body.limit === null ? 500 : Number(body.limit)
+  if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new HttpError(400, 'limit: 1..1000')
+  let after: { c: string; i: string } | null = null
+  if (typeof body.cursor === 'string' && body.cursor) {
+    try { after = JSON.parse(atob(body.cursor.replace(/-/g, '+').replace(/_/g, '/'))) as { c: string; i: string } } catch { throw new HttpError(400, 'bad cursor') }
+    if (!after || typeof after.c !== 'string' || !UUID.test(String(after.i)) || Number.isNaN(Date.parse(after.c))) throw new HttpError(400, 'bad cursor')
+  }
+  const email = typeof body.email === 'string' && body.email.includes('@') ? body.email.trim().toLowerCase() : null
+  const raw = await susRpc<SandListRaw>(env, 'sand_list', { after_created: after?.c ?? null, after_id: after?.i ?? null, lim: limit, owner_email: email })
+  const origin = new URL(req.url).origin
+  const items = await Promise.all(raw.items.map(async ({ object_key, thumb_key, ...rest }) => ({
+    ...rest,
+    thumb_url: thumb_key && safeKey(thumb_key) ? await mediaLink(env, origin, thumb_key, 'day') : null,
+    url: safeKey(object_key) ? await mediaLink(env, origin, object_key, 'day') : null,
+  })))
+  const last = raw.items[raw.items.length - 1]
+  const next = raw.items.length === limit && last ? btoa(JSON.stringify({ c: last.created_at, i: last.id })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') : null
+  return { projects: raw.projects, items, next }
+}
+
+async function dedupeCheck(env: Env, req: Request) {
+  await requireDedupeSecret(env, req)
+  let body: { hashes?: unknown; files?: unknown; email?: unknown }
+  try { body = (await req.json()) as typeof body } catch { throw new HttpError(400, 'bad json') }
+  const hashes = body.hashes ?? []
+  const files = body.files ?? []
+  if (!Array.isArray(hashes) || hashes.length > 1000) throw new HttpError(400, 'hashes: array of at most 1000')
+  if (!Array.isArray(files) || files.length > 1000) throw new HttpError(400, 'files: array of at most 1000')
+  const hs = hashes.map((h) => String(h).toLowerCase())
+  if (hs.some((h) => !/^[0-9a-f]{64}$/.test(h))) throw new HttpError(400, 'hashes must be hex SHA-256')
+  const fs = files.map((f) => {
+    const x = f as { name?: unknown; size?: unknown }
+    if (typeof x?.name !== 'string' || !x.name || x.name.length > 255 || !Number.isSafeInteger(x.size) || (x.size as number) < 0) throw new HttpError(400, 'files: { name, size }')
+    return { name: x.name, size: x.size as number }
+  })
+  const email = typeof body.email === 'string' && body.email.includes('@') ? body.email.trim().toLowerCase() : null
+  if (!hs.length && !fs.length) return { hashes: [], files: [], matches: [] }
+  return susRpc<{ hashes: string[]; files: { name: string; size: number }[]; matches: DedupeMatch[] }>(env, 'dedupe_check', { hashes: hs, files: fs, owner_email: email })
+}
+/** Where a matching file lives in Sand (read-only info for the Sus "Duplicates" tab). */
+interface DedupeMatch {
+  via: 'hash' | 'name'
+  media_id: string
+  sha256: string | null
+  name: string // lower-cased original name
+  size: number
+  file_name: string | null
+  kind: 'photo' | 'video'
+  created_at: string
+  project_id: string | null // the Sand project (or folder) it is grouped under
+  project: string | null // its name
+  project_path: string | null // "Folder / Project"
+  folder: string | null // subtask path inside the project ("Stem / Polish"), null when on the project itself
+  item_id: string
+  item_title: string
+  item_kind: 'item' | 'folder'
+  path: string // "Folder / Project / Subtask"
 }
 
 async function mediaUrls(env: Env, req: Request) {
@@ -638,6 +831,11 @@ export default {
       if (req.method === 'POST' && path === '/api/media/upload') return json(await mediaUpload(env, req), 200, h)
       if (req.method === 'POST' && path === '/api/media/urls') return json(await mediaUrls(env, req), 200, h)
       if (req.method === 'POST' && path === '/api/media/delete') return json(await mediaDelete(env, req), 200, h)
+      if (req.method === 'POST' && path === '/api/media/sign') return json(await mediaSign(env, req), 200, h)
+      if (req.method === 'POST' && path === '/api/media/multipart/complete') return json(await multipartComplete(env, req), 200, h)
+      if (req.method === 'POST' && path === '/api/media/multipart/abort') return json(await multipartAbort(env, req), 200, h)
+      if (req.method === 'POST' && path === '/api/dedupe/check') return json(await dedupeCheck(env, req), 200, {})
+      if (req.method === 'POST' && path === '/api/dedupe/list') return json(await dedupeList(env, req), 200, {})
       if (req.method === 'GET' && path.startsWith('/api/share/')) {
         const data = await share(env, decodeURIComponent(path.slice('/api/share/'.length)), url.origin)
         return data ? json(data, 200, h) : json({ error: 'not found' }, 404, h)

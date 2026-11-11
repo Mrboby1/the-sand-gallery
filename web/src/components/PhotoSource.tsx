@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Camera, ImagePlus, Search } from 'lucide-react'
+import { Camera, ImagePlus, Search, Video } from 'lucide-react'
 import { useApp, childrenOf, descendantIds } from '../store/app'
 import { useFinishedProjects } from '../lib/hooks'
 import { Sheet } from './ui'
@@ -19,11 +19,12 @@ function Choice({ icon, title, hint, onClick }: { icon: React.ReactNode; title: 
 }
 
 /** Phones: "Add photos / videos" asks where from, the camera or the gallery. */
-export function PhotoSourceSheet({ open, onClose, onCamera, onPick }: { open: boolean; onClose: () => void; onCamera: () => void; onPick: () => void }) {
+export function PhotoSourceSheet({ open, onClose, onCamera, onVideo, onPick }: { open: boolean; onClose: () => void; onCamera: () => void; onVideo: () => void; onPick: () => void }) {
   return (
     <Sheet open={open} onClose={onClose} title={t('photos.addTitle')}>
       <div className="flex flex-col gap-1">
         <Choice icon={<Camera size={21} />} title={t('gallery.takePhoto')} hint={t('gallery.takePhotoHint')} onClick={() => { onClose(); onCamera() }} />
+        <Choice icon={<Video size={21} />} title={t('gallery.recordVideo')} hint={t('gallery.recordVideoHint')} onClick={() => { onClose(); onVideo() }} />
         <Choice icon={<ImagePlus size={21} />} title={t('photos.fromGallery')} hint={t('gallery.chooseHint')} onClick={() => { onClose(); onPick() }} />
       </div>
     </Sheet>

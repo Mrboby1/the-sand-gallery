@@ -11,7 +11,7 @@ import { t } from '../i18n'
  *   Android Chrome that lands in Downloads/, which Google Photos / Files show by themselves.
  */
 
-const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/gif': 'gif', 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' }
+const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/gif': 'gif', 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm', 'video/3gpp': '3gp' }
 
 function slug(s: string) {
   return s.normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'sand-gallery'
@@ -66,6 +66,22 @@ export function saveCameraEnabled(): boolean {
 }
 export function setSaveCamera(on: boolean) {
   try { localStorage.setItem(PREF, on ? '1' : '0') } catch { /* ignore */ }
+}
+
+// "Save recorded videos to phone" (per device, default OFF): videos recorded in the app go to the Sand Gallery only,
+// so they are not stored twice (once here, once by the phone's photo backup).
+const VPREF = 'sg.saveVideo'
+export function saveVideoEnabled(): boolean {
+  try { return localStorage.getItem(VPREF) === '1' } catch { return false }
+}
+export function setSaveVideo(on: boolean) {
+  try { localStorage.setItem(VPREF, on ? '1' : '0') } catch { /* ignore */ }
+}
+/** After recording a video in the app: a copy on the phone only when that setting is on. */
+export function saveRecordedVideo(file: File) {
+  if (!saveVideoEnabled()) return
+  try { saveBlob(file, file.name) } catch { /* the toast below still offers it */ }
+  toast(t('camera.videoSaved'), 'info', { label: t('camera.saveAgain'), run: () => void shareOrSave(file) }, 7000)
 }
 
 /** A clear name for a photo just taken: SandGallery_20261110_143205.jpg */

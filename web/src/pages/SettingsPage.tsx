@@ -7,7 +7,7 @@ import { ArrowDown, ArrowUp, Bell, Check, Copy, DatabaseBackup, LogOut, Maximize
 import { useNavigate } from 'react-router-dom'
 import { FEATURE_GROUPS, featureHow, featureTitle } from '../lib/features'
 import { flashTo } from './FeaturesPage'
-import { saveCameraEnabled, setSaveCamera } from '../lib/download'
+import { saveCameraEnabled, saveVideoEnabled, setSaveCamera, setSaveVideo } from '../lib/download'
 import { AllowedPeople, DataSection } from './DataSection'
 import {
   useApp, addStatus, addTemplate, backend, deleteStatus, deleteTemplate, moveStatus, revokeShare, saveSettings, shareUrl,
@@ -173,7 +173,10 @@ export function SettingsPage() {
         </Section>
 
         <Section id="photos" title={t('camera.section')}>
-          <CameraSaveToggle />
+          <div className="flex flex-col gap-4">
+            <CameraSaveToggle />
+            <VideoSaveToggle />
+          </div>
         </Section>
 
         <Section id="data" title={t('data.section')} hint={backend.mode === 'local' ? t('data.sectionHint.offline') : t('data.sectionHint.online')}>
@@ -217,6 +220,20 @@ function CameraSaveToggle() {
         <div className="text-[13px] text-muted">{t('camera.settingHint')}</div>
       </div>
       <Switch checked={on} onChange={(v) => { setOn(v); setSaveCamera(v) }} label={t('camera.setting')} />
+    </div>
+  )
+}
+
+/** Per device, default off: videos recorded in the app stay in the Sand Gallery only. */
+function VideoSaveToggle() {
+  const [on, setOn] = useState(saveVideoEnabled)
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <div className="font-medium">{t('camera.videoSetting')}</div>
+        <div className="text-[13px] text-muted">{t('camera.videoSettingHint')}</div>
+      </div>
+      <Switch checked={on} onChange={(v) => { setOn(v); setSaveVideo(v) }} label={t('camera.videoSetting')} />
     </div>
   )
 }
@@ -427,6 +444,7 @@ function SettingsSearch() {
     { id: 'share', label: t('settings.shareLinks'), kw: 'share link revoke public' },
     { id: 'features', label: t('settings.features'), kw: 'features tips help how' },
     { id: 'photos', label: t('camera.setting'), kw: 'camera photo save phone gallery downloads copy take picture' },
+    { id: 'photos', label: t('camera.videoSetting'), kw: 'video record save phone gallery downloads copy camera roll backup' },
     { id: 'data', label: t('data.export.button'), kw: 'export download file backup save computer zip sandgallery' },
     { id: 'data', label: t('data.import.button'), kw: 'import restore upload file open sandgallery' },
     { id: 'data', label: t('data.mode.offline'), kw: 'offline version no account device install download app local storage' },

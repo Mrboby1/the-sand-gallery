@@ -76,6 +76,8 @@ export interface Media {
   note?: string | null
   /** Original file name (used when it is downloaded). */
   file_name?: string | null
+  /** SHA-256 of the original, lowercase hex (migration 0018; lets the Sus Gallery skip files already here). */
+  sha256?: string | null
   created_at: ISODate
 }
 

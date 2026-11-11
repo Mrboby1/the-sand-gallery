@@ -10,7 +10,8 @@ import { DEFAULT_SETTINGS } from '../lib/types'
 import { t } from '../i18n'
 import { makeUploadParts } from '../lib/media'
 import type { UploadPart } from '../lib/backend/types'
-import { allJobs, askPersist, deleteJob, freeBytes, mb, putJob, type UploadJob } from '../lib/uploadQueue'
+import { allJobs, askPersist, deleteJob, dropMeta, freeBytes, mb, putJob, readMeta, writeMeta, type UploadJob } from '../lib/uploadQueue'
+import { sha256Hex } from '../lib/hash'
 
 /** notAllowed: signed in to the online version with an account that is not on the allow-list. */
 export type Phase = 'booting' | 'signedOut' | 'loading' | 'ready' | 'notAllowed'
@@ -637,19 +638,32 @@ async function uploadOne(id: string) {
   const item = get().data.items.find((i) => i.id === job.itemId)
   if (!item) { await dropJob(id); return } // its item was deleted meanwhile
   setPending(id, { status: 'uploading', progress: 0, error: undefined })
+  const meta = readMeta(id)
+  if (!job.object_key && meta.object_key) { job.object_key = meta.object_key; job.thumb_key = meta.thumb_key ?? null }
   try {
+    // content hash for the Sus Gallery dedupe; a failure here never blocks the upload
+    if (meta.sha256 === undefined) {
+      meta.sha256 = await sha256Hex(job.original).catch((e) => { console.warn('hash failed', e); return null })
+      writeMeta(id, { sha256: meta.sha256 })
+    }
     if (!job.object_key) {
       const parts: UploadPart[] = [{ role: 'original', blob: job.original, contentType: job.mime, ext: job.ext }]
       if (job.thumb && job.thumbType && job.thumbExt) parts.push({ role: 'thumb', blob: job.thumb, contentType: job.thumbType, ext: job.thumbExt })
-      const res = await backend.uploadMedia(job.itemId, parts, (pr) => setPending(id, { progress: pr }))
+      const res = await backend.uploadMedia(job.itemId, parts, (pr) => setPending(id, { progress: pr }), {
+        state: meta.mp,
+        save: (mp) => { meta.mp = mp; writeMeta(id, { mp }) },
+      })
       job.object_key = res.object_key
       job.thumb_key = res.thumb_key
-      await putJob(job).catch(() => {}) // remember the stored keys: a retry then only saves the row
+      // remember the stored keys: a retry then only saves the row
+      writeMeta(id, { object_key: res.object_key, thumb_key: res.thumb_key, mp: undefined })
+      meta.mp = undefined
     }
     const row: Media = {
       id: job.id, item_id: job.itemId, object_key: job.object_key, thumb_key: job.thumb_key ?? null, kind: job.kind,
       mime: job.mime, size_bytes: job.size, width: job.width, height: job.height, duration_s: job.duration,
       phase: 'process', created_at: job.created_at, file_name: job.name.slice(0, 255) || null,
+      ...(meta.sha256 ? { sha256: meta.sha256 } : {}),
     }
     await backend.insert('media', [row])
     // Swap to the stored copy; reuse the local blob URLs so the picture does not flicker.
@@ -661,16 +675,22 @@ async function uploadOne(id: string) {
     }))
     lastLocalWrite = Date.now()
     await deleteJob(id)
+    dropMeta(id)
     jobBlobs.delete(id)
     const it = get().data.items.find((i) => i.id === job.itemId)
     if (it && !it.cover_media_id) void updateItem(job.itemId, { cover_media_id: row.id })
   } catch (e) {
     if (isNetworkError(e)) { setPending(id, { status: 'waiting', progress: 0 }); throw e }
     console.error('upload failed', e)
+    if (meta.mp) { // a big upload that storage refused: cancel it, Retry starts over
+      await backend.abortUpload?.(meta.mp).catch(() => {})
+      meta.mp = undefined
+      writeMeta(id, { mp: undefined })
+    }
     if (job.object_key) { // stored but the row was refused (e.g. item gone): remove the files
       await backend.deleteMediaObjects([job.object_key, job.thumb_key].filter(Boolean) as string[]).catch(() => {})
       job.object_key = undefined; job.thumb_key = undefined
-      await putJob(job).catch(() => {})
+      writeMeta(id, { object_key: undefined, thumb_key: undefined })
     }
     setPending(id, { status: 'error', error: t('upload.failed') })
   }
@@ -707,6 +727,9 @@ async function dropJob(id: string) {
   jobBlobs.delete(id)
   set((s) => ({ pending: s.pending.filter((x) => x.id !== id) }))
   await deleteJob(id)
+  const mp = readMeta(id).mp
+  if (mp) void backend.abortUpload?.(mp).catch(() => {}) // a half-done big upload: free its parts
+  dropMeta(id)
 }
 
 export function retryUpload(id: string) {

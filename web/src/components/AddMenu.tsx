@@ -7,6 +7,7 @@ import { useMediaQuery } from '../lib/hooks'
 import { cameraFile, saveCameraPhoto } from '../lib/download'
 import { useApp, addNote, createItem, toast, uploadFiles } from '../store/app'
 import { NewItemSheet } from './ItemBits'
+import { useRecordVideo } from './VideoRecorder'
 import { Button, Sheet, cx } from './ui'
 import { t } from '../i18n'
 
@@ -27,6 +28,8 @@ export function AddMenu({ parentId, parentTitle, parentKind = parentId ? 'item' 
   const nav = useNavigate()
   const file = useRef<HTMLInputElement>(null)
   const camera = useRef<HTMLInputElement>(null)
+  // "Record video": the in-app recorder (nothing lands in the phone's camera roll) or the camera app
+  const record = useRecordVideo(parentId)
   return (
     <>
       {variant !== 'fab' && <div className="hidden sm:block">
@@ -67,7 +70,8 @@ export function AddMenu({ parentId, parentTitle, parentKind = parentId ? 'item' 
           else if (what !== 'note') setSheet(what)
         }}
       />
-      <PhotoSourceSheet open={sheet === 'source'} onClose={() => setSheet(null)} onCamera={() => camera.current?.click()} onPick={() => file.current?.click()} />
+      <PhotoSourceSheet open={sheet === 'source'} onClose={() => setSheet(null)} onCamera={() => camera.current?.click()} onVideo={record.start} onPick={() => file.current?.click()} />
+      {record.ui}
       {sheet === 'pickProject' && <ProjectPickerSheet scopeId={parentId} onClose={() => setSheet(null)} onPick={(id) => { setSheet(null); setLogFor(id) }} />}
       {logFor && <SessionSheet itemId={logFor} session={null} onClose={() => setLogFor(null)} />}
       <NewItemSheet open={sheet === 'item'} onClose={() => setSheet(null)} parentId={parentId} stay={!!parentId} />

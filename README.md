@@ -49,6 +49,45 @@ download if the browser held it back. `media.file_name` (migration 0015) keeps t
 Download uses it: online through the Worker link with `?dl=1&name=` (Content-Disposition: attachment, sanitised,
 RFC 5987), offline from the local blob.
 
+**Record video** (v1.11, `components/VideoRecorder.tsx`): the same sheet has "Record video". It opens an in-app recorder
+(getUserMedia + MediaRecorder, back camera, flip button, MP4 where Chrome supports it, else WebM, ~6 Mbit/s, screen
+kept on, stops cleanly when the app is put away) and uploads the clip straight into the open project/folder. The clip
+exists only in the app and Sand: nothing is written to the phone unless Settings > Photos > "Save recorded videos to
+phone" is on (per device, `sg.saveVideo`, **default off**). "Use the phone's camera app" (`accept=video/*`
+`capture=environment`) is the higher-quality fallback, and the only way where getUserMedia is missing or refused.
+Finding (Chromium `SelectFileDialog.java`, checked 2026-11-11): for photos Chrome passes the camera an `EXTRA_OUTPUT`
+file in its own cache, so a captured photo is NOT in the camera roll; for video it sends a bare
+`ACTION_VIDEO_CAPTURE`, so the camera app always saves the clip to DCIM/Camera (camera roll) and hands Chrome that
+file. Those clips keep the camera's file name, so the Sus Gallery's dedupe can match them (see below).
+
+**Big files** (> 32 MB, `uploadMultipart` in `backend/supabase.ts`): a B2 multipart upload. The Worker starts and
+completes it (POST is not in the bucket CORS rule, and does not need to be); the browser PUTs 8 MB parts (bigger for
+files > 70 GB) straight to B2 with presigned URLs from `/api/media/sign` (12 h), three at a time, each retried 5 times.
+Finished parts are kept per job in localStorage (`sg.upmeta.<id>`, not in IndexedDB, which would copy the video again),
+so a lost connection or a closed app resumes from the last part. Limits: B2 allows 10,000 parts and 10 TB; the real
+limit is the phone's free space (the queue keeps a local copy until the upload is done). Single files <= 32 MB use one
+presigned PUT (B2 limit 5 GB).
+
+**Content hash** (migration 0018): the browser computes SHA-256 of every original before uploading (`lib/hash.ts`,
+WebCrypto up to 48 MB, else `@noble/hashes` in 4 MB slices) and stores it in `media.sha256`. The 5 photos uploaded
+before v1.11 were backfilled through the Worker's `/f/` links (Cloudflare, not B2 direct).
+
+**Dedupe lookup for the Sus Gallery** (`POST /api/dedupe/check`, contract in
+`C:\Users\gabib\family-gallery\infra\SAND-DEDUPE.md`): read-only, Worker-to-Worker, header
+`Authorization: Bearer <DEDUPE_SECRET>` (Worker secret; the value is the Sus side's DPAPI secret `sand-dedupe-secret`,
+read with `family-gallery\infra\get-secret.ps1`). Body `{ hashes: [hex sha256], files: [{name, size}], email? }` (up to
+1000 each). Answer `{ hashes: [found], files: [{name, size}], matches: [{ via: hash|name, media_id, sha256, name,
+size, file_name, kind, created_at, project_id, project, project_path, folder, item_id, item_title, item_kind, path }] }`
+(`project` = the Sand project, or the folder for photos on a folder; `folder` = subtask path inside it; `path` =
+"Folder / Project / Subtask"). All owners unless `email` is given. 401 bad secret, 400 bad body, 503 database asleep
+(ask again later).
+`POST /api/dedupe/list` (same secret): a read-only page of Sand media for the Sus Gallery's "Sand Gallery" folder,
+`{ cursor, limit <= 1000 }` -> `{ projects: [{id, name, path, kind}], items: [{ id, project_id, folder, name, kind,
+mime, size, sha256, taken_at: null, created_at, width, height, duration, phase, thumb_url, url }], next }`, newest
+first. `thumb_url`/`url` are this Worker's `/f/` links (valid 1-2 days, CORS *); `thumb_url` only ever points at the
+stored thumbnail, never the original (B2 daily download cap). SQL: `dedupe_check()`, `sand_list()` and
+`private.sand_tree()` (migrations 0018/0019; security definer, service_role only; nothing writes).
+
 Bucket `sand-gallery-ypghnj`. **Every key starts with `sand-gallery/`** and the B2 key is restricted to that prefix:
 - originals `sand-gallery/media/<user>/<item>/<uuid>.<ext>`
 - thumbnails `sand-gallery/thumbs/<user>/<item>/<uuid>.webp` (made in the browser: resized photo / video poster frame)
@@ -69,6 +108,10 @@ The service worker caches thumbnails by path, fetching in CORS mode so only real
 | `POST /api/media/upload` | presigned PUTs for a new file (+ thumb) [auth] |
 | `POST /api/media/urls` | presigned GETs for own keys [auth] |
 | `POST /api/media/delete` | delete own objects [auth] |
+| `POST /api/media/sign` | a fresh PUT URL for an own key, or part URLs of a multipart upload [auth] |
+| `POST /api/media/multipart/complete`, `/abort` | finish / cancel a multipart upload (big videos) [auth] |
+| `POST /api/dedupe/check` | which hashes / (name, size) are in Sand, and where; for the Sus Gallery [shared secret] |
+| `POST /api/dedupe/list` | read-only page of Sand media with signed thumb/original links, for the Sus Gallery [shared secret] |
 | `GET /api/share/:token` | public gallery for a share link (titles, statuses, media; no notes/times/costs) |
 | `GET /api/health` | `up` / `asleep` / `waking` / `unreachable` |
 | `POST /api/wake` | restores a paused Supabase project. Needs a Supabase JWT, verified locally against the embedded JWKS (works while the DB sleeps; tokens up to 30 days past expiry accepted); 1 call/min per user, and 1 per 30 min total without a token (KV `RATE`) |
@@ -96,7 +139,7 @@ Uploads retry with backoff; a failed thumbnail keeps the photo (shown from the o
 deletes whatever was stored and shows Retry/Remove on the tile.
 
 Vars live in `worker/wrangler.toml`; secrets (`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ACCESS_TOKEN`,
-`B2_APPLICATION_KEY`) are Worker secrets only.
+`B2_APPLICATION_KEY`, `DEDUPE_SECRET`) are Worker secrets only.
 
 ### Updates of the installed app
 `src/lib/updates.ts`: the service worker is checked for a new version every 30 min and whenever the app comes back
@@ -267,4 +310,6 @@ Code lives in the PUBLIC repo https://github.com/Mrboby1/the-sand-gallery (publi
 push `main` after each commit, never force-push. Because anyone can read it: never commit secrets or tokens (the
 Supabase anon key and the VAPID public key are public by design; anything from `infra/get-secret.ps1` never), never
 commit real user data, and only commit screenshots of test/demo data (never Gabi's real account). `infra/` stays
-untracked. Backblaze: only bucket `sand-gallery-ypghnj`, only `sand-gallery/` keys.
+untracked. Backblaze: only bucket `sand-gallery-ypghnj`, only `sand-gallery/` keys. **Agents never delete, hide or
+purge anything in Backblaze (Gabi, 2026-11-11), test uploads included**: leave test files and list them in the
+report. Delete features are for the human users only.
