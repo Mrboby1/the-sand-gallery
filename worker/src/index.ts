@@ -403,6 +403,20 @@ async function multipartAbort(env: Env, req: Request) {
   return { ok: true }
 }
 
+// ------------------------------------------------------------------ client diagnostics
+/** POST /api/log [signed in]: the app reports upload problems here so they show up in the Worker logs. */
+const logBudget = new Map<string, { n: number; at: number }>()
+async function clientLog(env: Env, req: Request) {
+  const user = await requireSignedIn(env, req)
+  const now = Date.now()
+  const b = logBudget.get(user.id)
+  if (b && now - b.at < 60_000 && b.n >= 20) return { ok: false }
+  if (!b || now - b.at >= 60_000) logBudget.set(user.id, { n: 1, at: now }); else b.n++
+  const text = (await req.text()).slice(0, 2000)
+  console.warn('client', JSON.stringify({ user: user.id.slice(0, 8), ua: (req.headers.get('User-Agent') ?? '').slice(0, 140), data: text }))
+  return { ok: true }
+}
+
 // ------------------------------------------------------------------ dedupe lookup (Sus Gallery)
 /*
  * POST /api/dedupe/check, header Authorization: Bearer <DEDUPE_SECRET> (or X-Dedupe-Secret). Read-only.
@@ -836,6 +850,7 @@ export default {
       if (req.method === 'POST' && path === '/api/media/multipart/abort') return json(await multipartAbort(env, req), 200, h)
       if (req.method === 'POST' && path === '/api/dedupe/check') return json(await dedupeCheck(env, req), 200, {})
       if (req.method === 'POST' && path === '/api/dedupe/list') return json(await dedupeList(env, req), 200, {})
+      if (req.method === 'POST' && path === '/api/log') return json(await clientLog(env, req), 200, h)
       if (req.method === 'GET' && path.startsWith('/api/share/')) {
         const data = await share(env, decodeURIComponent(path.slice('/api/share/'.length)), url.origin)
         return data ? json(data, 200, h) : json({ error: 'not found' }, 404, h)

@@ -64,7 +64,13 @@ file. Those clips keep the camera's file name, so the Sus Gallery's dedupe can m
 completes it (POST is not in the bucket CORS rule, and does not need to be); the browser PUTs 8 MB parts (bigger for
 files > 70 GB) straight to B2 with presigned URLs from `/api/media/sign` (12 h), three at a time, each retried 5 times.
 Finished parts are kept per job in localStorage (`sg.upmeta.<id>`, not in IndexedDB, which would copy the video again),
-so a lost connection or a closed app resumes from the last part. Limits: B2 allows 10,000 parts and 10 TB; the real
+so a lost connection or a closed app resumes from the last part.
+Queue rules (v1.11.1, after "nothing uploads" on 2026-11-12: one video part hung on a dead phone connection, no error
+ever fired, and the one-at-a-time queue waited forever): every PUT has a 60 s no-progress watchdog, Worker calls time
+out after 30 s and Supabase calls after 45 s; a job that fails waits (15 s, 30 s, ... 10 min) while the other jobs carry
+on; photos and clips <= 32 MB go before big videos; coming back to the foreground or online retries at once. Upload
+failures are reported to `POST /api/log` (signed in; error text, size, type, parts done, online/hidden, no names) and
+show in the Worker logs as `client {...}`. Limits: B2 allows 10,000 parts and 10 TB; the real
 limit is the phone's free space (the queue keeps a local copy until the upload is done). Single files <= 32 MB use one
 presigned PUT (B2 limit 5 GB).
 
@@ -111,6 +117,7 @@ The service worker caches thumbnails by path, fetching in CORS mode so only real
 | `POST /api/media/sign` | a fresh PUT URL for an own key, or part URLs of a multipart upload [auth] |
 | `POST /api/media/multipart/complete`, `/abort` | finish / cancel a multipart upload (big videos) [auth] |
 | `POST /api/dedupe/check` | which hashes / (name, size) are in Sand, and where; for the Sus Gallery [shared secret] |
+| `POST /api/log` | client diagnostics (upload failures) into the Worker log [signed in, 20/min] |
 | `POST /api/dedupe/list` | read-only page of Sand media with signed thumb/original links, for the Sus Gallery [shared secret] |
 | `GET /api/share/:token` | public gallery for a share link (titles, statuses, media; no notes/times/costs) |
 | `GET /api/health` | `up` / `asleep` / `waking` / `unreachable` |

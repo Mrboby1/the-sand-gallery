@@ -71,6 +71,8 @@ export interface Backend {
 
   // media
   uploadMedia(itemId: string, parts: UploadPart[], onProgress?: (fraction: number) => void, resume?: UploadResume): Promise<UploadResult>
+  /** Diagnostics for the Worker log (cloud only). */
+  log?(data: Record<string, unknown>): Promise<void>
   /** Cancels an unfinished multipart upload (its parts would otherwise use storage). */
   abortUpload?(state: MultipartState): Promise<void>
   /** Resolves storage keys to displayable URLs. */

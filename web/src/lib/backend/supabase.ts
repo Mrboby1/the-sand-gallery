@@ -31,7 +31,14 @@ export class SupabaseBackend implements Backend {
   constructor(private cfg: CloudConfig) {
     this.sb = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' },
+      // a request on a dead mobile connection fails after 45 s instead of hanging (and holding up the queues)
+      global: { fetch: (input, init) => fetch(input, { ...init, signal: init?.signal ?? (typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal ? AbortSignal.timeout(45_000) : undefined) }) },
     })
+  }
+
+  /** Client diagnostics (upload failures) into the Worker log. Never throws. */
+  async log(data: Record<string, unknown>) {
+    await this.api('/api/log', { method: 'POST', body: JSON.stringify(data) }, true, 1).catch(() => {})
   }
 
   // ---------- auth ----------
@@ -163,7 +170,9 @@ export class SupabaseBackend implements Backend {
         const headers = new Headers(init.headers)
         if (auth) headers.set('Authorization', `Bearer ${await this.token()}`)
         if (init.body) headers.set('Content-Type', 'application/json')
-        const res = await fetch(this.cfg.workerUrl.replace(/\/$/, '') + path, { ...init, headers })
+        // never wait forever on a dead mobile connection (the error message says "timeout": a network error)
+        const signal = init.signal ?? (typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal ? AbortSignal.timeout(30_000) : undefined)
+        const res = await fetch(this.cfg.workerUrl.replace(/\/$/, '') + path, { ...init, headers, signal })
         if (res.status >= 500 && i < attempts - 1) throw new RetryableError(`${path}: ${res.status}`)
         if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text().catch(() => '')}`)
         return (await res.json()) as T
@@ -264,8 +273,12 @@ export class SupabaseBackend implements Backend {
       return urls.get(n)!
     }
     let next = 0
+    let failed = false // one lane failed: the others stop taking parts (the queue resumes the whole job later)
     const lane = async () => {
-      while (next < todo.length) {
+      try { await laneLoop() } catch (e) { failed = true; throw e }
+    }
+    const laneLoop = async () => {
+      while (next < todo.length && !failed) {
         const n = todo[next++]
         const from = (n - 1) * state.partSize
         const blob = original.blob.slice(from, from + partLen(n))
@@ -276,7 +289,7 @@ export class SupabaseBackend implements Backend {
         inflight.delete(n)
         if (!etag) throw new Error('Upload failed: no ETag from storage')
         state.done[n] = etag
-        resume?.save(state)
+        if (!failed) resume?.save(state)
         report()
       }
     }
@@ -397,13 +410,15 @@ function partSizeFor(size: number): number {
 export function isNetworkError(e: unknown): boolean {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
   const m = String((e as { message?: unknown })?.message ?? e)
-  return /Failed to fetch|NetworkError|(^|[^p])Load failed|(network)|timeout/i.test(m)
+  if ((e as { name?: string })?.name === 'TimeoutError') return true
+  return /Failed to fetch|NetworkError|(^|[^p])Load failed|(network)|timeout|timed out/i.test(m)
 }
 
 async function withRetry<T>(fn: () => Promise<T>, attempts = 4): Promise<T> {
   for (let i = 0; ; i++) {
     try { return await fn() } catch (e) {
-      if (i >= attempts - 1) throw e
+      // a stalled connection (already 60 s of nothing) or no connection: give up now, the queue tries again later
+      if (i >= attempts - 1 || /stalled/i.test(String((e as Error)?.message)) || (typeof navigator !== 'undefined' && navigator.onLine === false)) throw e
       await sleep(800 * 2 ** i)
     }
   }
@@ -423,15 +438,29 @@ function strip<T extends object>(row: T): T {
   return copy as T
 }
 
-/** PUT with upload progress; resolves with the ETag B2 returns (needed for multipart parts). */
+/**
+ * PUT with upload progress; resolves with the ETag B2 returns (needed for multipart parts).
+ * A watchdog aborts a request that makes no progress for STALL_MS: on phones a connection cut while the app is in the
+ * background often never fires an error, and one hung request used to block the whole upload queue.
+ */
+const STALL_MS = 60_000
 function putWithProgress(url: string, blob: Blob, contentType: string | null, onLoaded: (n: number) => void): Promise<string> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let settled = false
+    const finish = (fn: () => void) => { if (settled) return; settled = true; clearTimeout(timer); fn() }
+    const arm = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => finish(() => { xhr.abort(); reject(new Error('Upload stalled (network timeout)')) }), STALL_MS)
+    }
     xhr.open('PUT', url)
     if (contentType) xhr.setRequestHeader('Content-Type', contentType)
-    xhr.upload.onprogress = (e) => onLoaded(e.loaded)
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve(xhr.getResponseHeader('ETag') ?? '') : reject(new Error(`Upload failed: ${xhr.status}`)))
-    xhr.onerror = () => reject(new Error('Upload failed (network)'))
+    xhr.upload.onprogress = (e) => { arm(); onLoaded(e.loaded) }
+    xhr.onload = () => finish(() => (xhr.status >= 200 && xhr.status < 300 ? resolve(xhr.getResponseHeader('ETag') ?? '') : reject(new Error(`Upload failed: ${xhr.status}`))))
+    xhr.onerror = () => finish(() => reject(new Error('Upload failed (network)')))
+    xhr.onabort = () => finish(() => reject(new Error('Upload stopped (network)')))
+    arm()
     xhr.send(blob)
   })
 }

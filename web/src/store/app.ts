@@ -640,12 +640,11 @@ async function uploadOne(id: string) {
   setPending(id, { status: 'uploading', progress: 0, error: undefined })
   const meta = readMeta(id)
   if (!job.object_key && meta.object_key) { job.object_key = meta.object_key; job.thumb_key = meta.thumb_key ?? null }
+  // content hash for the Sus Gallery dedupe: runs next to the upload (never in front of it), a failure is just "no hash"
+  const hashing: Promise<string | null | undefined> = meta.sha256 !== undefined ? Promise.resolve(meta.sha256) : sha256Hex(job.original)
+    .catch((e) => { console.warn('hash failed', e); return null })
+    .then((h) => { meta.sha256 = h; writeMeta(id, { sha256: h }); return h })
   try {
-    // content hash for the Sus Gallery dedupe; a failure here never blocks the upload
-    if (meta.sha256 === undefined) {
-      meta.sha256 = await sha256Hex(job.original).catch((e) => { console.warn('hash failed', e); return null })
-      writeMeta(id, { sha256: meta.sha256 })
-    }
     if (!job.object_key) {
       const parts: UploadPart[] = [{ role: 'original', blob: job.original, contentType: job.mime, ext: job.ext }]
       if (job.thumb && job.thumbType && job.thumbExt) parts.push({ role: 'thumb', blob: job.thumb, contentType: job.thumbType, ext: job.thumbExt })
@@ -659,6 +658,7 @@ async function uploadOne(id: string) {
       writeMeta(id, { object_key: res.object_key, thumb_key: res.thumb_key, mp: undefined })
       meta.mp = undefined
     }
+    await hashing
     const row: Media = {
       id: job.id, item_id: job.itemId, object_key: job.object_key, thumb_key: job.thumb_key ?? null, kind: job.kind,
       mime: job.mime, size_bytes: job.size, width: job.width, height: job.height, duration_s: job.duration,
@@ -680,6 +680,7 @@ async function uploadOne(id: string) {
     const it = get().data.items.find((i) => i.id === job.itemId)
     if (it && !it.cover_media_id) void updateItem(job.itemId, { cover_media_id: row.id })
   } catch (e) {
+    reportUpload(job, meta.mp, e)
     if (isNetworkError(e)) { setPending(id, { status: 'waiting', progress: 0 }); throw e }
     console.error('upload failed', e)
     if (meta.mp) { // a big upload that storage refused: cancel it, Retry starts over
@@ -696,18 +697,61 @@ async function uploadOne(id: string) {
   }
 }
 
-/** Uploads waiting jobs in order. Stops at the first network failure (tried again later). */
+/** Upload problems go to the Worker log (no file contents, no names), at most once a minute per file. */
+const lastReport = new Map<string, number>()
+function reportUpload(job: UploadJob, mp: { done: Record<number, string>; partSize: number } | undefined, e: unknown) {
+  const now = Date.now()
+  if (now - (lastReport.get(job.id) ?? 0) < 60_000) return
+  lastReport.set(job.id, now)
+  void backend.log?.({
+    event: 'upload_failed', error: String((e as Error)?.message ?? e).slice(0, 200), network: isNetworkError(e),
+    kind: job.kind, mime: job.mime, size: job.size, fails: failCount.get(job.id) ?? 0,
+    multipart: mp ? { done: Object.keys(mp.done).length, parts: Math.ceil(job.size / mp.partSize) } : null,
+    online: typeof navigator !== 'undefined' ? navigator.onLine : null, hidden: typeof document !== 'undefined' ? document.hidden : null,
+  })
+}
+
+// After a failure a job waits (15 s, 30 s, ... up to 10 min) while the others carry on: one stuck video must never
+// hold back the photos behind it (v1.11.0 bug: a hung video upload stopped every upload).
+const retryAt = new Map<string, number>()
+const failCount = new Map<string, number>()
+let wakeHooked = false
+
+/** Uploads waiting jobs, oldest first, skipping jobs that failed a moment ago. Stops when offline. */
 export function processUploads(): Promise<void> {
   if (processing) return processing
   processing = (async () => {
+    const tried = new Set<string>()
     for (;;) {
       if (typeof navigator !== 'undefined' && navigator.onLine === false) break
-      const next = [...get().pending].sort((a, b) => a.created_at.localeCompare(b.created_at)).find((x) => x.status === 'waiting')
-      if (!next || !get().user) break
-      try { await uploadOne(next.id) } catch { if (get().health === 'up') set({ health: 'unreachable' }); break }
+      if (!get().user) break
+      const now = Date.now()
+      // photos and short clips first, then big videos; oldest first within each
+      const big = (id: string) => (jobBlobs.get(id)?.size ?? 0) > 32 * 1048576 ? 1 : 0
+      const next = [...get().pending].sort((a, b) => big(a.id) - big(b.id) || a.created_at.localeCompare(b.created_at))
+        .find((x) => x.status === 'waiting' && !tried.has(x.id) && (retryAt.get(x.id) ?? 0) <= now)
+      if (!next) break
+      tried.add(next.id)
+      try {
+        await uploadOne(next.id)
+        retryAt.delete(next.id); failCount.delete(next.id)
+      } catch (e) {
+        const n = (failCount.get(next.id) ?? 0) + 1
+        failCount.set(next.id, n)
+        retryAt.set(next.id, Date.now() + Math.min(10 * 60_000, 15_000 * 2 ** (n - 1)))
+        // the Worker itself unreachable (not just a storage upload): let the health check look
+        if (!/upload/i.test(String((e as Error)?.message ?? e)) && get().health === 'up') set({ health: 'unreachable' })
+      }
     }
   })().finally(() => { processing = null })
-  if (!uploadTimer) uploadTimer = setInterval(() => { if (get().pending.some((x) => x.status === 'waiting')) void processUploads() }, 30_000)
+  if (!uploadTimer) uploadTimer = setInterval(() => { if (get().pending.some((x) => x.status === 'waiting')) void processUploads() }, 15_000)
+  if (!wakeHooked && typeof document !== 'undefined') {
+    wakeHooked = true
+    // back in the foreground or back online: try again now (and clear the wait, the connection may be fine again)
+    const kick = () => { if (document.visibilityState === 'visible') { retryAt.clear(); void processUploads() } }
+    document.addEventListener('visibilitychange', kick)
+    window.addEventListener('online', kick)
+  }
   return processing
 }
 
@@ -733,6 +777,7 @@ async function dropJob(id: string) {
 }
 
 export function retryUpload(id: string) {
+  retryAt.delete(id)
   setPending(id, { status: 'waiting', error: undefined })
   void processUploads()
 }
