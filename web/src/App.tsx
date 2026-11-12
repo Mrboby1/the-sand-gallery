@@ -10,6 +10,7 @@ import { FeaturesPage } from './pages/FeaturesPage'
 import { SharePage } from './pages/SharePage'
 import { Login, NotAllowed } from './pages/Login'
 import { Toasts, WakeLayer } from './components/Shell'
+import { UploadBar } from './components/UploadBar'
 import { RunningChip } from './components/Timer'
 import { ItemMenuHost } from './components/ItemMenu'
 import { TimerNotifier } from './components/TimerNotifier'
@@ -74,7 +75,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/s/:token" element={<SharePage />} />
-        <Route path="*" element={<><WakeLayer /><Gate /></>} />
+        <Route path="*" element={<><WakeLayer /><Gate /><UploadBar /></>} />
       </Routes>
       <Toasts />
       <DialogHost />

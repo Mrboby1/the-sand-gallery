@@ -70,7 +70,16 @@ ever fired, and the one-at-a-time queue waited forever): every PUT has a 60 s no
 out after 30 s and Supabase calls after 45 s; a job that fails waits (15 s, 30 s, ... 10 min) while the other jobs carry
 on; photos and clips <= 32 MB go before big videos; coming back to the foreground or online retries at once. Upload
 failures are reported to `POST /api/log` (signed in; error text, size, type, parts done, online/hidden, no names) and
-show in the Worker logs as `client {...}`. Limits: B2 allows 10,000 parts and 10 TB; the real
+show in the Worker logs as `client {...}`.
+Long videos (v1.11.2, Gabi's 20/40-minute Pixel clips, several GB): files > 200 MB show their tile and start uploading
+at once, and the device copy (for resuming after the app was closed) is written alongside instead of first; a copy
+that finishes after the upload is dropped, and a restored job whose row already exists is never uploaded twice. The
+SHA-256 runs in a Web Worker (`lib/hash.worker.ts`, 8 MB slices), so the file is never held in memory and the page
+stays smooth. A multipart upload that hits a storage error keeps its parts and retries by itself (only 404 /
+NoSuchUpload starts over). `components/UploadBar.tsx`: a pill "Uploading video: 1.2 GB of 4.0 GB · about 6 min left ·
+Keep Sand open with the screen on" (Android pauses web apps in the background), and the screen is kept on (Wake Lock)
+while anything uploads. Waiting/uploading tiles show "Waiting" / "Uploading 42% · 1.2 GB / 4.0 GB" / "Upload failed +
+Retry", and tapping one shows or plays it from the copy on the phone; once stored it turns into the normal tile. Limits: B2 allows 10,000 parts and 10 TB; the real
 limit is the phone's free space (the queue keeps a local copy until the upload is done). Single files <= 32 MB use one
 presigned PUT (B2 limit 5 GB).
 

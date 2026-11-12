@@ -503,6 +503,13 @@ export const en = {
   'upload.noSpace': 'Not enough space on this device to keep this file offline (needs {need}, {free} free). Upload it when you are online.',
   'upload.notKept': '"{name}" is too big to keep on this device. Keep the app open until it has uploaded.',
   'upload.retry': 'Retry',
+  'upload.uploadingPct': 'Uploading {p}%',
+  'upload.barNow': 'Uploading video: {done} of {size}',
+  'upload.barWaiting': 'Video waiting to upload ({size})',
+  'upload.barMore': '{n} more waiting',
+  'upload.keepOpen': 'Keep Sand open with the screen on until it is done',
+  'upload.etaMin': 'about {m} min left',
+  'upload.etaHours': 'about {h} h {m} min left',
   'upload.dismiss': 'Remove',
 
   'menu.actions': 'Actions',

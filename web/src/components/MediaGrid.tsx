@@ -6,6 +6,7 @@ import { useApp, deleteMedia, dismissUpload, pendingAsMedia, retryUpload, update
 import { cameraFile, downloadMedia, downloadName, saveCameraPhoto } from '../lib/download'
 import { PhotoSourceSheet } from './PhotoSource'
 import { useRecordVideo } from './VideoRecorder'
+import { fmtBytes } from './UploadBar'
 import { useMediaQuery, useMediaUrl } from '../lib/hooks'
 import { Thumb } from './Tile'
 import { IconButton, confirmDialog, cx } from './ui'
@@ -19,6 +20,8 @@ export function MediaSection({ item }: { item: Item }) {
   const uploads = allPending.filter((u) => u.itemId === item.id)
   const [filter, setFilter] = useState<Filter>('all')
   const [open, setOpen] = useState<number | null>(null)
+  /** a pending upload opened from its local copy */
+  const [localOpen, setLocalOpen] = useState<string | null>(null)
   const [noteOpen, setNoteOpen] = useState(false)
   const [drag, setDrag] = useState(false)
   const picker = useRef<HTMLInputElement>(null)
@@ -105,8 +108,13 @@ export function MediaSection({ item }: { item: Item }) {
             <div key={u.id} className="relative flex aspect-square flex-col items-center justify-center gap-1.5 overflow-hidden bg-surface-2 p-2 text-center">
               {/* the picture itself, from the copy kept on this device */}
               <Thumb media={pendingAsMedia(u)} alt={u.name} className={cx('absolute inset-0 h-full w-full', u.status === 'error' ? 'opacity-25' : 'opacity-80')} />
+              {/* tap: view / play it from the copy on this device while it uploads */}
+              <button onClick={() => setLocalOpen(u.id)} aria-label={`${t(u.kind === 'video' ? 'gallery.video' : 'gallery.photo')}: ${u.name}`} className="absolute inset-0" />
+              {u.kind === 'video' && u.status !== 'error' && (
+                <span className="pointer-events-none absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/45 text-white"><Play size={11} fill="white" /></span>
+              )}
               {u.status === 'waiting' && (
-                <span className="absolute bottom-1.5 left-1.5 right-1.5 inline-flex items-center justify-center gap-1 rounded-full bg-[#2a2017]/80 px-2 py-0.5 text-[10px] font-medium text-white" title={u.persisted ? t('upload.waitingKept') : t('upload.waiting')}>
+                <span className="pointer-events-none absolute bottom-1.5 left-1.5 right-1.5 inline-flex items-center justify-center gap-1 rounded-full bg-[#2a2017]/80 px-2 py-0.5 text-[10px] font-medium text-white" title={u.persisted ? t('upload.waitingKept') : t('upload.waiting')}>
                   <CloudUpload size={11} className="shrink-0" /> <span className="truncate">{t('upload.waiting')}</span>
                 </span>
               )}
@@ -120,10 +128,16 @@ export function MediaSection({ item }: { item: Item }) {
                   </div>
                 </>
               ) : u.status === 'uploading' && (
-                <svg viewBox="0 0 36 36" className="relative h-12 w-12 -rotate-90 drop-shadow" role="progressbar" aria-valuenow={Math.round(u.progress * 100)} aria-label={u.name}>
+                <>
+                <svg viewBox="0 0 36 36" className="pointer-events-none relative h-12 w-12 -rotate-90 drop-shadow" role="progressbar" aria-valuenow={Math.round(u.progress * 100)} aria-label={u.name}>
                   <circle cx="18" cy="18" r="15" fill="none" stroke="var(--sg-line)" strokeWidth="3" />
                   <circle cx="18" cy="18" r="15" fill="none" stroke="var(--sg-accent)" strokeWidth="3" strokeLinecap="round" strokeDasharray={`${u.progress * 94.2} 94.2`} />
                 </svg>
+                {/* how far: percent, and MB/GB for long videos */}
+                <span className="pointer-events-none absolute bottom-1.5 left-1.5 right-1.5 truncate rounded-full bg-[#2a2017]/80 px-2 py-0.5 text-[10px] font-medium tabular text-white">
+                  {t('upload.uploadingPct', { p: Math.floor(u.progress * 100) })}{u.size > 32 * 1048576 ? ` · ${fmtBytes(u.progress * u.size)} / ${fmtBytes(u.size)}` : ''}
+                </span>
+                </>
               )}
             </div>
           ))}
@@ -136,6 +150,10 @@ export function MediaSection({ item }: { item: Item }) {
       <PhotoSourceSheet open={source} onClose={() => setSource(false)} onCamera={shoot} onVideo={record.start} onPick={pick} />
       {record.ui}
       {drag && <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-3xl text-lg font-medium text-accent-strong">{t('gallery.dropHere')}</div>}
+      {localOpen && uploads.some((u) => u.id === localOpen) && (
+        // still uploading: shown from this device, read-only (it has no stored row yet)
+        <Lightbox list={[pendingAsMedia(uploads.find((u) => u.id === localOpen)!)]} index={0} item={item} readOnly onIndex={() => {}} onClose={() => setLocalOpen(null)} />
+      )}
       {open !== null && shown[open] && (
         <Lightbox list={shown} index={open} item={item} onIndex={(i) => { setNoteOpen(false); setOpen(i) }} onClose={() => setOpen(null)} noteOpen={noteOpen} />
       )}
@@ -197,7 +215,7 @@ export function Lightbox({ list, index, item, onIndex, onClose, readOnly, noteOp
         {index > 0 && <button aria-label="Previous" onClick={prev} className="absolute left-3 hidden h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 sm:flex"><ChevronLeft /></button>}
         {index < list.length - 1 && <button aria-label="Next" onClick={next} className="absolute right-3 hidden h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 sm:flex"><ChevronRight /></button>}
       </div>
-      <MediaNote key={m.id} media={m} initialOpen={noteOpen} />
+      <MediaNote key={m.id} media={m} initialOpen={noteOpen} editable={!readOnly} />
       {readOnly ? (
         <div className="flex items-center justify-center gap-2 px-3 py-3 safe-bottom">
           {url && <LbButton label={t('gallery.download')} onClick={() => downloadMedia(url, downloadName(m, item, index))}><Download size={16} /></LbButton>}

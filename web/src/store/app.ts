@@ -22,6 +22,10 @@ export interface PendingUpload {
   /** stored on this device (survives closing the app) */
   persisted: boolean
   status: 'waiting' | 'uploading' | 'error'; progress: number; error?: string
+  /** bytes of the original */
+  size: number
+  /** current upload speed (bytes/s), for "about N min left" */
+  rate?: number
 }
 
 const emptySnap = (): Snapshot => ({
@@ -574,6 +578,10 @@ export function deleteSession(id: string) {
  * app open, every 30 s), then the media row is saved and the local copy is dropped.
  */
 const jobBlobs = new Map<string, UploadJob>() // jobs of this session (also the in-memory fallback)
+/** Uploaded in this session: a device copy that finishes writing later is removed instead of uploaded again. */
+const finishedJobs = new Set<string>()
+/** Files above this start uploading at once; their device copy is written alongside (see uploadFiles). */
+const KEEP_IN_BACKGROUND = 200 * 1048576
 let processing: Promise<void> | null = null
 let uploadTimer: ReturnType<typeof setInterval> | undefined
 
@@ -588,7 +596,7 @@ function addPending(job: UploadJob, persisted: boolean, status: PendingUpload['s
     urls: { ...s.urls, ...urls },
     pending: [...s.pending.filter((x) => x.id !== job.id), {
       id: job.id, itemId: job.itemId, name: job.name, kind: job.kind, created_at: job.created_at,
-      width: job.width, height: job.height, persisted, status, progress: 0, error,
+      width: job.width, height: job.height, persisted, status, progress: 0, error, size: job.size,
     }],
   }))
 }
@@ -617,6 +625,19 @@ export async function uploadFiles(itemId: string, files: File[]) {
     // Keep a copy on the device so it survives closing the app; check there is room first.
     const need = file.size + (thumb?.blob.size ?? 0) + 2 * 1048576
     const free = await freeBytes()
+    if (file.size > KEEP_IN_BACKGROUND) {
+      // Long videos (GBs): copying them takes minutes. Show the tile and start uploading straight away; the copy (for
+      // resuming after the app was closed) is written alongside.
+      addPending(job, false)
+      if (free === null || free > need) {
+        void putJob(job).then(
+          () => { if (finishedJobs.has(job.id) || !jobBlobs.has(job.id)) void deleteJob(job.id); else setPending(job.id, { persisted: true }) },
+          (e) => { console.warn('could not store upload offline', e); toast(t('upload.notKept', { name: file.name }), 'info') },
+        )
+      } else toast(t('upload.notKept', { name: file.name }), 'info')
+      void processUploads()
+      continue
+    }
     let persisted = false
     if (free === null || free > need) {
       try { await putJob(job); persisted = true } catch (e) { console.warn('could not store upload offline', e) }
@@ -648,7 +669,17 @@ async function uploadOne(id: string) {
     if (!job.object_key) {
       const parts: UploadPart[] = [{ role: 'original', blob: job.original, contentType: job.mime, ext: job.ext }]
       if (job.thumb && job.thumbType && job.thumbExt) parts.push({ role: 'thumb', blob: job.thumb, contentType: job.thumbType, ext: job.thumbExt })
-      const res = await backend.uploadMedia(job.itemId, parts, (pr) => setPending(id, { progress: pr }), {
+      // progress + speed (for "about N min left"), at most 4 updates a second
+      const run = { t0: Date.now(), p0: -1, last: 0 }
+      const onProgress = (pr: number) => {
+        const tnow = Date.now()
+        if (run.p0 < 0) run.p0 = pr
+        if (tnow - run.last < 250 && pr < 1) return
+        run.last = tnow
+        const secs = (tnow - run.t0) / 1000
+        setPending(id, { progress: pr, ...(secs > 4 ? { rate: ((pr - run.p0) * job.size) / secs } : {}) })
+      }
+      const res = await backend.uploadMedia(job.itemId, parts, onProgress, {
         state: meta.mp,
         save: (mp) => { meta.mp = mp; writeMeta(id, { mp }) },
       })
@@ -674,6 +705,7 @@ async function uploadOne(id: string) {
       urls: { ...s.urls, [row.object_key]: s.urls[keys.object_key], ...(row.thumb_key && s.urls[keys.thumb_key] ? { [row.thumb_key]: s.urls[keys.thumb_key] } : {}) },
     }))
     lastLocalWrite = Date.now()
+    finishedJobs.add(id)
     await deleteJob(id)
     dropMeta(id)
     jobBlobs.delete(id)
@@ -681,7 +713,11 @@ async function uploadOne(id: string) {
     if (it && !it.cover_media_id) void updateItem(job.itemId, { cover_media_id: row.id })
   } catch (e) {
     reportUpload(job, meta.mp, e)
-    if (isNetworkError(e)) { setPending(id, { status: 'waiting', progress: 0 }); throw e }
+    // A big (multipart) upload keeps what it has and tries again by itself, unless storage no longer knows the upload
+    // (404 / NoSuchUpload): throwing away GBs over one storage hiccup would be far worse than waiting.
+    const msg = String((e as Error)?.message ?? e)
+    const resumable = !!meta.mp && !/\b404\b|NoSuchUpload|not your key|bad uploadId/i.test(msg)
+    if (isNetworkError(e) || resumable) { setPending(id, { status: 'waiting', rate: undefined }); throw e }
     console.error('upload failed', e)
     if (meta.mp) { // a big upload that storage refused: cancel it, Retry starts over
       await backend.abortUpload?.(meta.mp).catch(() => {})
@@ -760,7 +796,12 @@ export async function restoreUploads() {
   const uid = get().user?.id
   if (!uid) return
   const jobs = await allJobs()
-  for (const j of jobs) if (j.uid === uid && !jobBlobs.has(j.id)) addPending(j, true)
+  const stored = new Set(get().data.media.map((m) => m.id))
+  for (const j of jobs) {
+    if (j.uid !== uid || jobBlobs.has(j.id)) continue
+    if (stored.has(j.id)) { void deleteJob(j.id); dropMeta(j.id); continue } // already uploaded (a late copy): never twice
+    addPending(j, true)
+  }
   if (jobs.length) void processUploads()
 }
 
